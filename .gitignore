@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .claude
+
+# Cubiomes source (clone separately, see README)
+wasm/cubiomes/
