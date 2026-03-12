@@ -6,9 +6,9 @@
 static Generator g;
 
 EMSCRIPTEN_KEEPALIVE
-void initGenerator(int mcVersion, int64_t seed) {
+void initGenerator(int mcVersion, int seed) {
     setupGenerator(&g, mcVersion, 0);
-    applySeed(&g, DIM_OVERWORLD, (uint64_t)seed);
+    applySeed(&g, DIM_OVERWORLD, (uint64_t)(int64_t)seed);
 }
 
 EMSCRIPTEN_KEEPALIVE
