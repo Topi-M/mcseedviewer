@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import compassSvg from '../assets/compass.svg'
 
 const BIOME_COLORS = {
   // 0-9
@@ -114,6 +115,7 @@ const DEFAULT_COLOR = [100, 100, 100]
 const VIEW_SIZE = 512
 const TILE_PX = 128
 const VALID_CUBIOMES_SCALES = [1, 4, 16, 64, 256]
+const FADE_MS = 250
 
 const MC_VERSIONS = [
   { label: '1.21', value: 48 },
@@ -160,18 +162,35 @@ export default function SeedMap() {
   const mcVersionRef = useRef(mcVersion)
   const drawFrameRef = useRef(null)
   const scheduleDrawRef = useRef(null)
+  const compassRef = useRef(null)
+  const spawnRef = useRef({ x: 0, z: 0 })
 
   useEffect(() => { seedRef.current = seed }, [seed])
   useEffect(() => { mcVersionRef.current = mcVersion }, [mcVersion])
 
   useEffect(() => {
     window.CubiomesModule().then(instance => {
+      const malloc = instance.cwrap('malloc', 'number', ['number'])
+      const free   = instance.cwrap('freePtr', null, ['number'])
       wasmRef.current = {
-        initGenerator: instance.cwrap('initGenerator', null, ['number', 'number']),
-        getBiomeMap:   instance.cwrap('getBiomeMap', 'number', ['number', 'number', 'number', 'number', 'number']),
-        freePtr:       instance.cwrap('freePtr', null, ['number']),
-        HEAP32:        instance.HEAP32,
+        initGenerator:  instance.cwrap('initGenerator', null, ['number', 'number']),
+        getBiomeMap:    instance.cwrap('getBiomeMap', 'number', ['number', 'number', 'number', 'number', 'number']),
+        freePtr:        free,
+        getSpawnPoint:  instance.cwrap('getSpawnPoint', null, ['number', 'number', 'number', 'number']),
+        findStructures: instance.cwrap('findStructures', 'number', ['number','number','number','number','number','number','number','number','number']),
+        findStrongholds:instance.cwrap('findStrongholds', 'number', ['number','number','number','number']),
+        checkSlimeChunk:instance.cwrap('checkSlimeChunk', 'number', ['number','number','number']),
+        malloc,
+        HEAP32:         instance.HEAP32,
+        getValue:       instance.getValue,
       }
+
+      // Hae spawn heti kun WASM on ladattu
+      const pX = malloc(4), pZ = malloc(4)
+      wasmRef.current.getSpawnPoint(48, seedRef.current, pX, pZ)
+      spawnRef.current = { x: instance.getValue(pX, 'i32'), z: instance.getValue(pZ, 'i32') }
+      free(pX); free(pZ)
+
       setLoaded(true)
     }).catch(e => setError(e.message))
   }, [])
@@ -218,6 +237,7 @@ export default function SeedMap() {
       const tzMin = Math.floor((centerZ - VIEW_SIZE / 2 / screenPPB) / tileWorldSize)
       const tzMax = Math.floor((centerZ + VIEW_SIZE / 2 / screenPPB) / tileWorldSize)
 
+      let needsRedraw = false
       const needed = []
       for (let tx = txMin; tx <= txMax; tx++) {
         for (let tz = tzMin; tz <= tzMax; tz++) {
@@ -226,8 +246,12 @@ export default function SeedMap() {
           const sx = (tx * tileWorldSize - centerX) * screenPPB + VIEW_SIZE / 2
           const sy = (tz * tileWorldSize - centerZ) * screenPPB + VIEW_SIZE / 2
 
-          if (cached && cached !== 'pending') {
-            ctx.drawImage(cached, sx, sy, tileScreenSize, tileScreenSize)
+              if (cached && cached !== 'pending') {
+            const alpha = Math.min(1, (Date.now() - cached.addedAt) / FADE_MS)
+            ctx.globalAlpha = alpha
+            ctx.drawImage(cached.canvas, sx, sy, tileScreenSize, tileScreenSize)
+            ctx.globalAlpha = 1
+            if (alpha < 1) needsRedraw = true
           } else if (!cached) {
             needed.push({ tx, tz, cubiomesScale })
             tileCacheRef.current.set(key, 'pending')
@@ -235,9 +259,33 @@ export default function SeedMap() {
         }
       }
 
+      // Sort needed tiles center-out
+      const tileCenterX = (txMin + txMax) / 2
+      const tileCenterZ = (tzMin + tzMax) / 2
+      needed.sort((a, b) => {
+        const da = (a.tx - tileCenterX) ** 2 + (a.tz - tileCenterZ) ** 2
+        const db = (b.tx - tileCenterX) ** 2 + (b.tz - tileCenterZ) ** 2
+        return da - db
+      })
+
       if (needed.length > 0) {
         renderQueueRef.current.unshift(...needed)
         if (!isProcessingRef.current) processQueue()
+      }
+
+      // Position compass at world spawn
+      if (compassRef.current) {
+        const ox = (spawnRef.current.x - centerX) * screenPPB + VIEW_SIZE / 2
+        const oz = (spawnRef.current.z - centerZ) * screenPPB + VIEW_SIZE / 2
+        const inView = ox > -16 && ox < VIEW_SIZE + 16 && oz > -16 && oz < VIEW_SIZE + 16
+        compassRef.current.style.display = inView ? 'block' : 'none'
+        compassRef.current.style.left = `${ox - 16}px`
+        compassRef.current.style.top = `${oz - 16}px`
+      }
+
+      if (needsRedraw) {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(drawFrame)
       }
     }
 
@@ -256,7 +304,7 @@ export default function SeedMap() {
 
         const key = tileKey(item.tx, item.tz, item.cubiomesScale, seedRef.current, mcVersionRef.current)
         if (tileCacheRef.current.get(key) === 'pending') {
-          tileCacheRef.current.set(key, generateTileCanvas(item.tx, item.tz, item.cubiomesScale))
+          tileCacheRef.current.set(key, { canvas: generateTileCanvas(item.tx, item.tz, item.cubiomesScale), addedAt: Date.now() })
           drawFrame()
         }
 
@@ -270,6 +318,15 @@ export default function SeedMap() {
     scheduleDrawRef.current = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = requestAnimationFrame(drawFrame)
+    }
+
+    // Päivitä spawn uudelle seedille/versiolle
+    if (wasmRef.current) {
+      const { getSpawnPoint, malloc, freePtr, getValue } = wasmRef.current
+      const pX = malloc(4), pZ = malloc(4)
+      getSpawnPoint(mcVersionRef.current, seedRef.current, pX, pZ)
+      spawnRef.current = { x: getValue(pX, 'i32'), z: getValue(pZ, 'i32') }
+      freePtr(pX); freePtr(pZ)
     }
 
     // Invalidate cache and redraw
@@ -358,13 +415,23 @@ export default function SeedMap() {
         </select>
         <button onClick={handleGenerate}>Näytä</button>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={VIEW_SIZE}
-        height={VIEW_SIZE}
-        style={{ imageRendering: 'pixelated', display: 'block', border: '1px solid #333', cursor: 'grab' }}
-        onMouseDown={handleMouseDown}
-      />
+      <div style={{ position: 'relative', width: VIEW_SIZE, height: VIEW_SIZE, border: '1px solid #333' }}
+        onMouseDown={handleMouseDown}>
+        <canvas
+          ref={canvasRef}
+          width={VIEW_SIZE}
+          height={VIEW_SIZE}
+          style={{ imageRendering: 'pixelated', display: 'block', cursor: 'grab' }}
+        />
+        <img
+          ref={compassRef}
+          src={compassSvg}
+          width={32}
+          height={32}
+          style={{ position: 'absolute', pointerEvents: 'none' }}
+          alt=""
+        />
+      </div>
     </div>
   )
 }
