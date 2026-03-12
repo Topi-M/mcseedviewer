@@ -168,11 +168,11 @@ const STRUCTURE_TYPES = [
   { id: 8,  label: 'Monument',        color: '#00ced1' },
   { id: 9,  label: 'Mansion',         color: '#8b4513' },
   { id: 10, label: 'Outpost',         color: '#a9a9a9' },
-  { id: 12, label: 'Ancient City',    color: '#9370db' },
+  { id: 13, label: 'Ancient City',    color: '#9370db' },
   { id: 6,  label: 'Ocean Ruin',      color: '#4169e1' },
   { id: 7,  label: 'Shipwreck',       color: '#deb887' },
-  { id: 22, label: 'Trail Ruins',     color: '#cd853f' },
-  { id: 23, label: 'Trial Chambers',  color: '#ff8c00' },
+  { id: 23, label: 'Trail Ruins',     color: '#cd853f' },
+  { id: 24, label: 'Trial Chambers',  color: '#ff8c00' },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
