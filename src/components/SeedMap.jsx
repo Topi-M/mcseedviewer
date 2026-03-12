@@ -66,7 +66,7 @@ const BIOME_COLORS = {
   // 127
   127: [0,   0,   0],   // the void
   // Mutated variants (128+)
-  129: [255, 210, 60],  // desert lakes
+  129: [213, 237, 126],  // sunflower plains
   130: [128, 128, 128], // gravelly mountains (windswept gravelly hills)
   131: [47,  128, 36],  // flower forest
   132: [49,  102, 89],  // taiga mountains
@@ -125,7 +125,7 @@ const BIOME_NAMES = {
   40: 'Small End Islands', 41: 'End Midlands', 42: 'End Highlands', 43: 'End Barrens',
   44: 'Warm Ocean', 45: 'Lukewarm Ocean', 46: 'Cold Ocean', 47: 'Deep Warm Ocean',
   48: 'Deep Lukewarm Ocean', 49: 'Deep Cold Ocean', 50: 'Deep Frozen Ocean',
-  127: 'The Void', 129: 'Desert Lakes', 130: 'Windswept Gravelly Hills',
+  127: 'The Void', 129: 'Sunflower Plains', 130: 'Windswept Gravelly Hills',
   131: 'Flower Forest', 132: 'Taiga Mountains', 133: 'Swamp Hills', 140: 'Ice Spikes',
   149: 'Modified Jungle', 151: 'Modified Jungle Edge', 155: 'Old Growth Birch Forest',
   156: 'Tall Birch Hills', 157: 'Dark Forest Hills', 158: 'Snowy Taiga Mountains',
@@ -150,13 +150,31 @@ const VALID_CUBIOMES_SCALES = [1, 4, 16, 64, 256]
 const FADE_MS = 250
 
 const MC_VERSIONS = [
-  { label: '1.21', value: 48 },
-  { label: '1.20', value: 47 },
-  { label: '1.18', value: 45 },
-  { label: '1.17', value: 44 },
-  { label: '1.16', value: 43 },
-  { label: '1.15', value: 42 },
-  { label: '1.12', value: 38 },
+  { label: '1.21.3',   value: 25 },
+  { label: '1.21.1',   value: 24 },
+  { label: '1.20',     value: 23 },
+  { label: '1.19.4',   value: 22 },
+  { label: '1.19.2',   value: 21 },
+  { label: '1.18',     value: 20 },
+  { label: '1.17',     value: 19 },
+  { label: '1.16',     value: 18 },
+  { label: '1.15',     value: 16 },
+  { label: '1.14',     value: 15 },
+  { label: '1.13',     value: 14 },
+  { label: '1.12',     value: 13 },
+  { label: '1.11',     value: 12 },
+  { label: '1.10',     value: 11 },
+  { label: '1.9',      value: 10 },
+  { label: '1.8',      value: 9  },
+  { label: '1.7',      value: 8  },
+  { label: '1.6',      value: 7  },
+  { label: '1.5',      value: 6  },
+  { label: '1.4',      value: 5  },
+  { label: '1.3',      value: 4  },
+  { label: '1.2',      value: 3  },
+  { label: '1.1',      value: 2  },
+  { label: '1.0',      value: 1  },
+  { label: 'Beta 1.8', value: 0  },
 ]
 
 const STRUCTURE_TYPES = [
@@ -184,8 +202,22 @@ function getCubiomesScale(screenPPB) {
   return 256
 }
 
+// Mappaa UI-versio oikeaan cubiomes-arvoon
+// Empirisesti testattu vertaamalla muihin seed mappeihin
+function getCubiomesVersion(v) {
+  if (v === 1)              return 2   // 1.0 → 1.1
+  if (v >= 3 && v <= 7)    return 7   // 1.2–1.6 → 1.6
+  if (v >= 8 && v <= 13)   return 13  // 1.7–1.12 → 1.12
+  if (v >= 14 && v <= 19)  return 19  // 1.13–1.17 → 1.17
+  if (v === 20)             return 22  // 1.18 → 1.19.4 generaattori
+  if (v === 21 || v === 22) return 23  // 1.19.2–1.19.4 → 1.20 generaattori
+  if (v === 23)             return 25  // 1.20 → 1.21.3 generaattori
+  if (v === 24 || v === 25) return 26  // 1.21.1–1.21.3 → MC_1_21_WD generaattori
+  return v
+}
+
 function tileKey(tx, tz, cubiomesScale, seed, mcVersion) {
-  return `${tx}_${tz}_${cubiomesScale}_${seed}_${mcVersion}`
+  return `${tx}_${tz}_${cubiomesScale}_${seed}_${getCubiomesVersion(mcVersion)}`
 }
 
 export default function SeedMap() {
@@ -196,7 +228,7 @@ export default function SeedMap() {
   const [error, setError] = useState(null)
   const [seedInput, setSeedInput] = useState('12345')
   const [seed, setSeed] = useState(12345)
-  const [mcVersion, setMcVersion] = useState(48)
+  const [mcVersion, setMcVersion] = useState(25)
   const [activeStructures, setActiveStructures] = useState(new Set())
   const [showSpawn, setShowSpawn] = useState(true)
 
@@ -260,7 +292,7 @@ export default function SeedMap() {
       const offscreen = new OffscreenCanvas(TILE_PX, TILE_PX)
       const octx = offscreen.getContext('2d')
 
-      initGenerator(mcVersionRef.current, seedRef.current)
+      initGenerator(getCubiomesVersion(mcVersionRef.current), seedRef.current)
       const ptr = getBiomeMap(tx * TILE_PX, tz * TILE_PX, TILE_PX, TILE_PX, cubiomesScale)
 
       const imageData = octx.createImageData(TILE_PX, TILE_PX)
@@ -335,7 +367,7 @@ export default function SeedMap() {
         const octx = overlayCanvasRef.current.getContext('2d')
         octx.clearRect(0, 0, VIEW_W, VIEW_H)
         const { initGenerator, findStructures, freePtr, HEAP32, malloc, getValue } = wasmRef.current
-        initGenerator(mcVersionRef.current, seedRef.current)
+        initGenerator(getCubiomesVersion(mcVersionRef.current), seedRef.current)
         const bx1 = Math.floor(centerX - VIEW_W / 2 / screenPPB)
         const bz1 = Math.floor(centerZ - VIEW_H / 2 / screenPPB)
         const bx2 = Math.ceil(centerX + VIEW_W / 2 / screenPPB)
@@ -344,7 +376,7 @@ export default function SeedMap() {
         for (const st of activeStructuresRef.current) {
           const stInfo = STRUCTURE_TYPES.find(s => s.id === st)
           if (!stInfo) continue
-          const ptr = findStructures(st, mcVersionRef.current, seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
+          const ptr = findStructures(st, getCubiomesVersion(mcVersionRef.current), seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
           const count = getValue(pCount, 'i32')
           octx.fillStyle = stInfo.color
           octx.strokeStyle = '#000'
@@ -415,7 +447,7 @@ export default function SeedMap() {
     if (wasmRef.current) {
       const { getSpawnPoint, malloc, freePtr, getValue } = wasmRef.current
       const pX = malloc(4), pZ = malloc(4)
-      getSpawnPoint(mcVersionRef.current, seedRef.current, pX, pZ)
+      getSpawnPoint(getCubiomesVersion(mcVersionRef.current), seedRef.current, pX, pZ)
       spawnRef.current = { x: getValue(pX, 'i32'), z: getValue(pZ, 'i32') }
       freePtr(pX); freePtr(pZ)
     }

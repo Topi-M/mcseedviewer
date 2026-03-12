@@ -22,7 +22,9 @@ int* getBiomeMap(int x, int z, int width, int height, int scale) {
     r.z = z;
     r.sx = width;
     r.sz = height;
-    r.y = 63;
+    // Pre-1.18: y ignoroidaan (2D biomit), arvo ei vaikuta
+    // 1.18+: 3D biomit, y=63 antaa maanpinnan biomit ilman luolabiomin ongelmia
+    r.y = (g.mc >= MC_1_18) ? 63 : 0;
     r.sy = 1;
     genBiomes(&g, biomes, r);
     return biomes;
@@ -79,7 +81,7 @@ int* findStructures(int structType, int mcVersion, int seed,
             if (biomeCheck && !isViableStructurePos(structType, &g, pos.x, pos.z, 0))
                 continue;
             // 1.18+: maastokorkeuteen perustuva lisätarkistus Desert Pyramid, Jungle Temple, Mansion
-            if (biomeCheck && mcVersion >= 45 &&
+            if (biomeCheck && mcVersion >= 20 &&
                 (structType == Desert_Pyramid || structType == Jungle_Temple || structType == Mansion) &&
                 !isViableStructureTerrain(structType, &g, pos.x, pos.z))
                 continue;
@@ -88,7 +90,7 @@ int* findStructures(int structType, int mcVersion, int seed,
             if (biomeCheck && structType == Desert_Pyramid) {
                 int bId = getBiomeAt(&g, 4, pos.x >> 2, 15, pos.z >> 2);
                 int valid;
-                if (mcVersion >= 45) { // 1.18+: vain desert
+                if (mcVersion >= 20) { // 1.18+: vain desert
                     valid = (bId == desert);
                 } else { // < 1.18: myös desert_hills
                     valid = (bId == desert || bId == desert_hills);
@@ -100,7 +102,7 @@ int* findStructures(int structType, int mcVersion, int seed,
             if (biomeCheck && structType == Jungle_Temple) {
                 int bId = getBiomeAt(&g, 4, pos.x >> 2, 15, pos.z >> 2); // y=60
                 int valid;
-                if (mcVersion >= 45) { // 1.18+: vain jungle ja bamboo_jungle
+                if (mcVersion >= 20) { // 1.18+: vain jungle ja bamboo_jungle
                     valid = (bId == jungle || bId == bamboo_jungle);
                 } else { // < 1.18: myös vanhat biomivariantit
                     valid = (bId == jungle || bId == bamboo_jungle ||
