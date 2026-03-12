@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import compassSvg from '../assets/compass.svg'
+import '../css/SeedMap.css'
 
 const BIOME_COLORS = {
   // 0-9
@@ -110,9 +111,40 @@ const BIOME_COLORS = {
   // 1.21
   186: [200, 200, 180], // pale garden
 }
+const BIOME_NAMES = {
+  0: 'Ocean', 1: 'Plains', 2: 'Desert', 3: 'Windswept Hills', 4: 'Forest',
+  5: 'Taiga', 6: 'Swamp', 7: 'River', 8: 'Nether Wastes', 9: 'The End',
+  10: 'Frozen Ocean', 11: 'Frozen River', 12: 'Snowy Plains', 13: 'Snowy Mountains',
+  14: 'Mushroom Fields', 15: 'Mushroom Field Shore', 16: 'Beach', 17: 'Desert Hills',
+  18: 'Wooded Hills', 19: 'Taiga Hills', 20: 'Mountain Edge', 21: 'Jungle',
+  22: 'Jungle Hills', 23: 'Sparse Jungle', 24: 'Deep Ocean', 25: 'Stony Shore',
+  26: 'Snowy Beach', 27: 'Birch Forest', 28: 'Birch Forest Hills', 29: 'Dark Forest',
+  30: 'Snowy Taiga', 31: 'Snowy Taiga Hills', 32: 'Old Growth Pine Taiga',
+  33: 'Giant Tree Taiga Hills', 34: 'Windswept Forest', 35: 'Savanna',
+  36: 'Savanna Plateau', 37: 'Badlands', 38: 'Wooded Badlands', 39: 'Badlands Plateau',
+  40: 'Small End Islands', 41: 'End Midlands', 42: 'End Highlands', 43: 'End Barrens',
+  44: 'Warm Ocean', 45: 'Lukewarm Ocean', 46: 'Cold Ocean', 47: 'Deep Warm Ocean',
+  48: 'Deep Lukewarm Ocean', 49: 'Deep Cold Ocean', 50: 'Deep Frozen Ocean',
+  127: 'The Void', 129: 'Desert Lakes', 130: 'Windswept Gravelly Hills',
+  131: 'Flower Forest', 132: 'Taiga Mountains', 133: 'Swamp Hills', 140: 'Ice Spikes',
+  149: 'Modified Jungle', 151: 'Modified Jungle Edge', 155: 'Old Growth Birch Forest',
+  156: 'Tall Birch Hills', 157: 'Dark Forest Hills', 158: 'Snowy Taiga Mountains',
+  160: 'Old Growth Spruce Taiga', 161: 'Giant Spruce Taiga Hills',
+  162: 'Modified Gravelly Mountains', 163: 'Windswept Savanna',
+  164: 'Shattered Savanna Plateau', 165: 'Eroded Badlands',
+  166: 'Wooded Badlands', 167: 'Modified Badlands Plateau',
+  168: 'Bamboo Jungle', 169: 'Bamboo Jungle Hills',
+  170: 'Soul Sand Valley', 171: 'Crimson Forest', 172: 'Warped Forest',
+  173: 'Basalt Deltas', 174: 'Dripstone Caves', 175: 'Lush Caves',
+  177: 'Meadow', 178: 'Grove', 179: 'Snowy Slopes', 180: 'Jagged Peaks',
+  181: 'Frozen Peaks', 182: 'Stony Peaks', 183: 'Deep Dark',
+  184: 'Mangrove Swamp', 185: 'Cherry Grove', 186: 'Pale Garden',
+}
+
 const DEFAULT_COLOR = [100, 100, 100]
 
-const VIEW_SIZE = 512
+const VIEW_W = 800
+const VIEW_H = 500
 const TILE_PX = 128
 const VALID_CUBIOMES_SCALES = [1, 4, 16, 64, 256]
 const FADE_MS = 250
@@ -125,6 +157,22 @@ const MC_VERSIONS = [
   { label: '1.16', value: 43 },
   { label: '1.15', value: 42 },
   { label: '1.12', value: 38 },
+]
+
+const STRUCTURE_TYPES = [
+  { id: 5,  label: 'Village',         color: '#ffff00' },
+  { id: 1,  label: 'Desert Pyramid',  color: '#ffd700' },
+  { id: 2,  label: 'Jungle Temple',   color: '#32cd32' },
+  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57' },
+  { id: 4,  label: 'Igloo',           color: '#add8e6' },
+  { id: 8,  label: 'Monument',        color: '#00ced1' },
+  { id: 9,  label: 'Mansion',         color: '#8b4513' },
+  { id: 10, label: 'Outpost',         color: '#a9a9a9' },
+  { id: 12, label: 'Ancient City',    color: '#9370db' },
+  { id: 6,  label: 'Ocean Ruin',      color: '#4169e1' },
+  { id: 7,  label: 'Shipwreck',       color: '#deb887' },
+  { id: 22, label: 'Trail Ruins',     color: '#cd853f' },
+  { id: 23, label: 'Trial Chambers',  color: '#ff8c00' },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
@@ -142,12 +190,15 @@ function tileKey(tx, tz, cubiomesScale, seed, mcVersion) {
 
 export default function SeedMap() {
   const canvasRef = useRef(null)
+  const overlayCanvasRef = useRef(null)
   const wasmRef = useRef(null)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(null)
   const [seedInput, setSeedInput] = useState('12345')
   const [seed, setSeed] = useState(12345)
   const [mcVersion, setMcVersion] = useState(48)
+  const [activeStructures, setActiveStructures] = useState(new Set())
+  const [showSpawn, setShowSpawn] = useState(true)
 
   // View: centerX/Z in world blocks, screenPPB = screen pixels per block
   const viewRef = useRef({ centerX: 0, centerZ: 0, screenPPB: 0.25 })
@@ -156,14 +207,20 @@ export default function SeedMap() {
   const renderQueueRef = useRef([])
   const isProcessingRef = useRef(false)
   const generationRef = useRef(0)
+  const biomeHoverRef = useRef(null)
   const dragRef = useRef(null)
   const rafRef = useRef(null)
   const seedRef = useRef(seed)
   const mcVersionRef = useRef(mcVersion)
+  const activeStructuresRef = useRef(new Set())
+  const showSpawnRef = useRef(true)
   const drawFrameRef = useRef(null)
   const scheduleDrawRef = useRef(null)
   const compassRef = useRef(null)
   const spawnRef = useRef({ x: 0, z: 0 })
+
+  useEffect(() => { activeStructuresRef.current = activeStructures }, [activeStructures])
+  useEffect(() => { showSpawnRef.current = showSpawn }, [showSpawn])
 
   useEffect(() => { seedRef.current = seed }, [seed])
   useEffect(() => { mcVersionRef.current = mcVersion }, [mcVersion])
@@ -229,13 +286,13 @@ export default function SeedMap() {
       const tileWorldSize = TILE_PX * cubiomesScale
       const tileScreenSize = tileWorldSize * screenPPB
 
-      ctx.clearRect(0, 0, VIEW_SIZE, VIEW_SIZE)
+      ctx.clearRect(0, 0, VIEW_W, VIEW_H)
       ctx.imageSmoothingEnabled = false
 
-      const txMin = Math.floor((centerX - VIEW_SIZE / 2 / screenPPB) / tileWorldSize)
-      const txMax = Math.floor((centerX + VIEW_SIZE / 2 / screenPPB) / tileWorldSize)
-      const tzMin = Math.floor((centerZ - VIEW_SIZE / 2 / screenPPB) / tileWorldSize)
-      const tzMax = Math.floor((centerZ + VIEW_SIZE / 2 / screenPPB) / tileWorldSize)
+      const txMin = Math.floor((centerX - VIEW_W / 2 / screenPPB) / tileWorldSize)
+      const txMax = Math.floor((centerX + VIEW_W / 2 / screenPPB) / tileWorldSize)
+      const tzMin = Math.floor((centerZ - VIEW_H / 2 / screenPPB) / tileWorldSize)
+      const tzMax = Math.floor((centerZ + VIEW_H / 2 / screenPPB) / tileWorldSize)
 
       let needsRedraw = false
       const needed = []
@@ -243,8 +300,8 @@ export default function SeedMap() {
         for (let tz = tzMin; tz <= tzMax; tz++) {
           const key = tileKey(tx, tz, cubiomesScale, seedRef.current, mcVersionRef.current)
           const cached = tileCacheRef.current.get(key)
-          const sx = (tx * tileWorldSize - centerX) * screenPPB + VIEW_SIZE / 2
-          const sy = (tz * tileWorldSize - centerZ) * screenPPB + VIEW_SIZE / 2
+          const sx = (tx * tileWorldSize - centerX) * screenPPB + VIEW_W / 2
+          const sy = (tz * tileWorldSize - centerZ) * screenPPB + VIEW_H / 2
 
               if (cached && cached !== 'pending') {
             const alpha = Math.min(1, (Date.now() - cached.addedAt) / FADE_MS)
@@ -273,12 +330,46 @@ export default function SeedMap() {
         if (!isProcessingRef.current) processQueue()
       }
 
+      // Piirrä strukturit overlay-canvasille
+      if (overlayCanvasRef.current && wasmRef.current) {
+        const octx = overlayCanvasRef.current.getContext('2d')
+        octx.clearRect(0, 0, VIEW_W, VIEW_H)
+        const { initGenerator, findStructures, freePtr, HEAP32, malloc, getValue } = wasmRef.current
+        initGenerator(mcVersionRef.current, seedRef.current)
+        const bx1 = Math.floor(centerX - VIEW_W / 2 / screenPPB)
+        const bz1 = Math.floor(centerZ - VIEW_H / 2 / screenPPB)
+        const bx2 = Math.ceil(centerX + VIEW_W / 2 / screenPPB)
+        const bz2 = Math.ceil(centerZ + VIEW_H / 2 / screenPPB)
+        const pCount = malloc(4)
+        for (const st of activeStructuresRef.current) {
+          const stInfo = STRUCTURE_TYPES.find(s => s.id === st)
+          if (!stInfo) continue
+          const ptr = findStructures(st, mcVersionRef.current, seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
+          const count = getValue(pCount, 'i32')
+          octx.fillStyle = stInfo.color
+          octx.strokeStyle = '#000'
+          octx.lineWidth = 1
+          for (let i = 0; i < count; i++) {
+            const bx = HEAP32[ptr / 4 + i * 2]
+            const bz = HEAP32[ptr / 4 + i * 2 + 1]
+            const sx = (bx - centerX) * screenPPB + VIEW_W / 2
+            const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
+            octx.beginPath()
+            octx.arc(sx, sy, 5, 0, Math.PI * 2)
+            octx.fill()
+            octx.stroke()
+          }
+          if (ptr) freePtr(ptr)
+        }
+        freePtr(pCount)
+      }
+
       // Position compass at world spawn
       if (compassRef.current) {
-        const ox = (spawnRef.current.x - centerX) * screenPPB + VIEW_SIZE / 2
-        const oz = (spawnRef.current.z - centerZ) * screenPPB + VIEW_SIZE / 2
-        const inView = ox > -16 && ox < VIEW_SIZE + 16 && oz > -16 && oz < VIEW_SIZE + 16
-        compassRef.current.style.display = inView ? 'block' : 'none'
+        const ox = (spawnRef.current.x - centerX) * screenPPB + VIEW_W / 2
+        const oz = (spawnRef.current.z - centerZ) * screenPPB + VIEW_H / 2
+        const inView = ox > -16 && ox < VIEW_W + 16 && oz > -16 && oz < VIEW_H + 16
+        compassRef.current.style.display = (inView && showSpawnRef.current) ? 'block' : 'none'
         compassRef.current.style.left = `${ox - 16}px`
         compassRef.current.style.top = `${oz - 16}px`
       }
@@ -345,8 +436,8 @@ export default function SeedMap() {
       e.preventDefault()
       if (!scheduleDrawRef.current) return
       const rect = canvas.getBoundingClientRect()
-      const mx = e.clientX - rect.left - VIEW_SIZE / 2
-      const my = e.clientY - rect.top - VIEW_SIZE / 2
+      const mx = e.clientX - rect.left - VIEW_W / 2
+      const my = e.clientY - rect.top - VIEW_H / 2
       const { centerX, centerZ, screenPPB } = viewRef.current
       const factor = e.deltaY > 0 ? 0.8 : 1.25
       const newPPB = Math.max(1 / 256, Math.min(4, screenPPB * factor))
@@ -399,9 +490,37 @@ export default function SeedMap() {
   if (error) return <div>WASM error: {error}</div>
   if (!loaded) return <div>Ladataan...</div>
 
+  function onHoverMove(e) {
+    if (!wasmRef.current || !biomeHoverRef.current) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
+    const { centerX, centerZ, screenPPB } = viewRef.current
+    const bx = Math.floor(centerX + (mx - VIEW_W / 2) / screenPPB)
+    const bz = Math.floor(centerZ + (my - VIEW_H / 2) / screenPPB)
+    const { getBiomeMap, freePtr, HEAP32 } = wasmRef.current
+    const ptr = getBiomeMap(Math.floor(bx / 4), Math.floor(bz / 4), 1, 1, 4)
+    const biomeId = HEAP32[ptr / 4]
+    freePtr(ptr)
+    const name = BIOME_NAMES[biomeId] ?? `Unknown (${biomeId})`
+    biomeHoverRef.current.textContent = `${bx}, ${bz} — ${name}`
+  }
+
+  function onHoverLeave() {
+    if (biomeHoverRef.current) biomeHoverRef.current.textContent = ''
+  }
+
+  function toggleStructure(id) {
+    const next = new Set(activeStructuresRef.current)
+    next.has(id) ? next.delete(id) : next.add(id)
+    activeStructuresRef.current = next      // päivitä ref heti, ennen drawFramea
+    setActiveStructures(new Set(next))      // päivitä state UI:ta varten
+    if (scheduleDrawRef.current) scheduleDrawRef.current()
+  }
+
   return (
-    <div>
-      <div style={{ marginBottom: 8, display: 'flex', gap: 8 }}>
+    <div className="seedmap-wrapper" style={{ '--map-w': `${VIEW_W}px` }}>
+      <div className="seedmap-controls">
         <input
           value={seedInput}
           onChange={e => setSeedInput(e.target.value)}
@@ -415,22 +534,56 @@ export default function SeedMap() {
         </select>
         <button onClick={handleGenerate}>Näytä</button>
       </div>
-      <div style={{ position: 'relative', width: VIEW_SIZE, height: VIEW_SIZE, border: '1px solid #333' }}
-        onMouseDown={handleMouseDown}>
-        <canvas
-          ref={canvasRef}
-          width={VIEW_SIZE}
-          height={VIEW_SIZE}
-          style={{ imageRendering: 'pixelated', display: 'block', cursor: 'grab' }}
-        />
-        <img
-          ref={compassRef}
-          src={compassSvg}
-          width={32}
-          height={32}
-          style={{ position: 'absolute', pointerEvents: 'none' }}
-          alt=""
-        />
+
+      <div
+        className="seedmap-viewport"
+        style={{ width: VIEW_W, height: VIEW_H }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={onHoverMove}
+        onMouseLeave={onHoverLeave}
+      >
+        <canvas ref={canvasRef} width={VIEW_W} height={VIEW_H} className="seedmap-canvas" />
+        <canvas ref={overlayCanvasRef} width={VIEW_W} height={VIEW_H} className="seedmap-overlay" />
+        <img ref={compassRef} src={compassSvg} className="seedmap-compass" alt="" />
+      </div>
+
+      <div className="seedmap-biome-hover" ref={biomeHoverRef} />
+
+      <div className="seedmap-structures">
+        <button
+          className="structure-btn"
+          onClick={() => {
+            showSpawnRef.current = !showSpawn
+            setShowSpawn(!showSpawn)
+            if (scheduleDrawRef.current) scheduleDrawRef.current()
+          }}
+          style={{
+            border: `2px solid #ff4444`,
+            background: showSpawn ? '#ff4444' : 'transparent',
+            opacity: showSpawn ? 1 : 0.5,
+          }}
+        >
+          <img src={compassSvg} alt="Spawn" />
+          <span className="structure-tooltip">Spawn</span>
+        </button>
+        {STRUCTURE_TYPES.map(s => {
+          const active = activeStructures.has(s.id)
+          return (
+            <button
+              key={s.id}
+              className="structure-btn"
+              onClick={() => toggleStructure(s.id)}
+              style={{
+                border: `2px solid ${s.color}`,
+                background: active ? s.color : 'transparent',
+                opacity: active ? 1 : 0.5,
+              }}
+            >
+              <img src={compassSvg} alt={s.label} />
+              <span className="structure-tooltip">{s.label}</span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

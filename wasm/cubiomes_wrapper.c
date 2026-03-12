@@ -78,6 +78,37 @@ int* findStructures(int structType, int mcVersion, int seed,
                 continue;
             if (biomeCheck && !isViableStructurePos(structType, &g, pos.x, pos.z, 0))
                 continue;
+            // 1.18+: maastokorkeuteen perustuva lisätarkistus Desert Pyramid, Jungle Temple, Mansion
+            if (biomeCheck && mcVersion >= 45 &&
+                (structType == Desert_Pyramid || structType == Jungle_Temple || structType == Mansion) &&
+                !isViableStructureTerrain(structType, &g, pos.x, pos.z))
+                continue;
+            // Eksplisiittinen biomitarkistus Desert Pyramidille:
+            // Minecraft sallii vain desert
+            if (biomeCheck && structType == Desert_Pyramid) {
+                int bId = getBiomeAt(&g, 4, pos.x >> 2, 15, pos.z >> 2);
+                int valid;
+                if (mcVersion >= 45) { // 1.18+: vain desert
+                    valid = (bId == desert);
+                } else { // < 1.18: myös desert_hills
+                    valid = (bId == desert || bId == desert_hills);
+                }
+                if (!valid) continue;
+            }
+            // Eksplisiittinen biomitarkistus Jungle Templelle:
+            // Minecraft sallii vain jungle ja bamboo_jungle, ei sparse_jungle
+            if (biomeCheck && structType == Jungle_Temple) {
+                int bId = getBiomeAt(&g, 4, pos.x >> 2, 15, pos.z >> 2); // y=60
+                int valid;
+                if (mcVersion >= 45) { // 1.18+: vain jungle ja bamboo_jungle
+                    valid = (bId == jungle || bId == bamboo_jungle);
+                } else { // < 1.18: myös vanhat biomivariantit
+                    valid = (bId == jungle || bId == bamboo_jungle ||
+                             bId == jungle_hills || bId == modified_jungle ||
+                             bId == bamboo_jungle_hills);
+                }
+                if (!valid) continue;
+            }
             results[count * 2 + 0] = pos.x;
             results[count * 2 + 1] = pos.z;
             count++;
