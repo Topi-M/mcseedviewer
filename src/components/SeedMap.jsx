@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import compassSvg from '../assets/compass.svg'
+
+// Structure icons
+import hut from '../assets/hut512.svg'
+import jungleTemple from '../assets/mosscobble512.svg'
+import desertTemple from '../assets/sandstone512.svg'
+import iglooIcon from '../assets/snowball.svg'
+
 import '../css/SeedMap.css'
 
 const BIOME_COLORS = {
@@ -143,8 +150,8 @@ const BIOME_NAMES = {
 
 const DEFAULT_COLOR = [100, 100, 100]
 
-const VIEW_W = 800
-const VIEW_H = 500
+const VIEW_W = 960
+const VIEW_H = 640
 const TILE_PX = 128
 const VALID_CUBIOMES_SCALES = [1, 4, 16, 64, 256]
 const FADE_MS = 250
@@ -181,20 +188,20 @@ const MC_VERSIONS = [
 const STRONGHOLD_ID = 'stronghold'
 
 const STRUCTURE_TYPES = [
-  { id: 5,  label: 'Village',         color: '#ffff00' },
-  { id: 1,  label: 'Desert Pyramid',  color: '#ffd700' },
-  { id: 2,  label: 'Jungle Temple',   color: '#32cd32' },
-  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57' },
-  { id: 4,  label: 'Igloo',           color: '#add8e6' },
-  { id: 8,  label: 'Monument',        color: '#00ced1' },
-  { id: 9,  label: 'Mansion',         color: '#8b4513' },
-  { id: 10, label: 'Outpost',         color: '#a9a9a9' },
-  { id: 13, label: 'Ancient City',    color: '#9370db' },
-  { id: 6,  label: 'Ocean Ruin',      color: '#4169e1' },
-  { id: 7,  label: 'Shipwreck',       color: '#deb887' },
-  { id: 23, label: 'Trail Ruins',     color: '#cd853f' },
-  { id: 24, label: 'Trial Chambers',  color: '#ff8c00' },
-  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff' },
+  { id: 5,  label: 'Village',         color: '#ffff00', icon: compassSvg },
+  { id: 1,  label: 'Desert Pyramid',  color: '#ffd700', icon: desertTemple },
+  { id: 2,  label: 'Jungle Temple',   color: '#32cd32', icon: jungleTemple },
+  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57', icon: hut },
+  { id: 4,  label: 'Igloo',           color: '#add8e6', icon: iglooIcon },
+  { id: 8,  label: 'Monument',        color: '#00ced1', icon: compassSvg },
+  { id: 9,  label: 'Mansion',         color: '#8b4513', icon: compassSvg },
+  { id: 10, label: 'Outpost',         color: '#a9a9a9', icon: compassSvg },
+  { id: 13, label: 'Ancient City',    color: '#9370db', icon: compassSvg },
+  { id: 6,  label: 'Ocean Ruin',      color: '#4169e1', icon: compassSvg },
+  { id: 7,  label: 'Shipwreck',       color: '#deb887', icon: compassSvg },
+  { id: 23, label: 'Trail Ruins',     color: '#cd853f', icon: compassSvg },
+  { id: 24, label: 'Trial Chambers',  color: '#ff8c00', icon: compassSvg },
+  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: compassSvg },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
@@ -258,6 +265,20 @@ export default function SeedMap() {
   const compassRef = useRef(null)
   const spawnRef = useRef({ x: 0, z: 0 })
   const strongholdCacheRef = useRef({ seed: null, version: null, positions: [] })
+  const structureHitboxesRef = useRef([])  // [{sx, sy, size, label, x, z}]
+  const [popup, setPopup] = useState(null) // {sx, sy, label, x, z}
+
+  // Preload structure icons as Image objects for canvas drawing
+  const structureImagesRef = useRef({})
+  useEffect(() => {
+    const images = {}
+    for (const s of STRUCTURE_TYPES) {
+      const img = new Image()
+      img.src = s.icon
+      images[s.id] = img
+    }
+    structureImagesRef.current = images
+  }, [])
 
   useEffect(() => { activeStructuresRef.current = activeStructures }, [activeStructures])
   useEffect(() => { showSpawnRef.current = showSpawn }, [showSpawn])
@@ -371,6 +392,7 @@ export default function SeedMap() {
       }
 
       // Piirrä strukturit overlay-canvasille
+      const hitboxes = []
       if (overlayCanvasRef.current && wasmRef.current) {
         const octx = overlayCanvasRef.current.getContext('2d')
         octx.clearRect(0, 0, VIEW_W, VIEW_H)
@@ -400,40 +422,57 @@ export default function SeedMap() {
               if (ptr) freePtr(ptr)
               strongholdCacheRef.current = { seed: curSeed, version: curVer, positions }
             }
-            octx.fillStyle = stInfo.color
-            octx.strokeStyle = '#000'
-            octx.lineWidth = 1
+            const shImg = structureImagesRef.current[STRONGHOLD_ID]
+            const iconSize = 16
             for (const pos of strongholdCacheRef.current.positions) {
               const sx = (pos.x - centerX) * screenPPB + VIEW_W / 2
               const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
-              if (sx > -10 && sx < VIEW_W + 10 && sy > -10 && sy < VIEW_H + 10) {
-                octx.beginPath()
-                octx.arc(sx, sy, 5, 0, Math.PI * 2)
-                octx.fill()
-                octx.stroke()
+              if (sx > -iconSize && sx < VIEW_W + iconSize && sy > -iconSize && sy < VIEW_H + iconSize) {
+                hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: pos.x, z: pos.z })
+                if (shImg && shImg.complete) {
+                  octx.shadowColor = 'white'
+                  octx.shadowBlur = 4
+                  octx.drawImage(shImg, sx - iconSize / 2, sy - iconSize / 2, iconSize, iconSize)
+                  octx.shadowColor = 'transparent'
+                  octx.shadowBlur = 0
+                } else {
+                  octx.fillStyle = stInfo.color
+                  octx.beginPath()
+                  octx.arc(sx, sy, 5, 0, Math.PI * 2)
+                  octx.fill()
+                }
               }
             }
           } else {
             const ptr = findStructures(st, getCubiomesVersion(mcVersionRef.current), seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
             const count = getValue(pCount, 'i32')
-            octx.fillStyle = stInfo.color
-            octx.strokeStyle = '#000'
-            octx.lineWidth = 1
+            const sImg = structureImagesRef.current[st]
+            const iconSize = 24
             for (let i = 0; i < count; i++) {
               const bx = HEAP32[ptr / 4 + i * 2]
               const bz = HEAP32[ptr / 4 + i * 2 + 1]
               const sx = (bx - centerX) * screenPPB + VIEW_W / 2
               const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
-              octx.beginPath()
-              octx.arc(sx, sy, 5, 0, Math.PI * 2)
-              octx.fill()
-              octx.stroke()
+              hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: bx, z: bz })
+              if (sImg && sImg.complete) {
+                octx.shadowColor = 'white'
+                octx.shadowBlur = 4
+                octx.drawImage(sImg, sx - iconSize / 2, sy - iconSize / 2, iconSize, iconSize)
+                octx.shadowColor = 'transparent'
+                octx.shadowBlur = 0
+              } else {
+                octx.fillStyle = stInfo.color
+                octx.beginPath()
+                octx.arc(sx, sy, 5, 0, Math.PI * 2)
+                octx.fill()
+              }
             }
             if (ptr) freePtr(ptr)
           }
         }
         freePtr(pCount)
       }
+      structureHitboxesRef.current = hitboxes
 
       // Position compass at world spawn
       if (compassRef.current) {
@@ -510,6 +549,7 @@ export default function SeedMap() {
       const mx = e.clientX - rect.left - VIEW_W / 2
       const my = e.clientY - rect.top - VIEW_H / 2
       const { centerX, centerZ, screenPPB } = viewRef.current
+      setPopup(null)
       const factor = e.deltaY > 0 ? 0.8 : 1.25
       const newPPB = Math.max(1 / 256, Math.min(4, screenPPB * factor))
       viewRef.current = {
@@ -525,15 +565,19 @@ export default function SeedMap() {
   }, [loaded])
 
   function handleMouseDown(e) {
+    const downX = e.clientX
+    const downY = e.clientY
     dragRef.current = {
-      startX: e.clientX, startY: e.clientY,
+      startX: downX, startY: downY,
       centerX: viewRef.current.centerX, centerZ: viewRef.current.centerZ,
     }
+    let dragged = false
 
     function onMove(e) {
       if (!dragRef.current || !scheduleDrawRef.current) return
       const dx = e.clientX - dragRef.current.startX
       const dy = e.clientY - dragRef.current.startY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { dragged = true; setPopup(null) }
       const screenPPB = viewRef.current.screenPPB
       viewRef.current = {
         ...viewRef.current,
@@ -543,10 +587,26 @@ export default function SeedMap() {
       scheduleDrawRef.current()
     }
 
-    function onUp() {
+    function onUp(e) {
       dragRef.current = null
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+
+      if (!dragged) {
+        const rect = overlayCanvasRef.current?.getBoundingClientRect()
+        if (!rect) return
+        const mx = e.clientX - rect.left
+        const my = e.clientY - rect.top
+        const hit = structureHitboxesRef.current.find(h => {
+          const half = h.size / 2
+          return mx >= h.sx - half && mx <= h.sx + half && my >= h.sy - half && my <= h.sy + half
+        })
+        if (hit) {
+          setPopup({ sx: hit.sx, sy: hit.sy, label: hit.label, x: hit.x, z: hit.z })
+        } else {
+          setPopup(null)
+        }
+      }
     }
 
     window.addEventListener('mousemove', onMove)
@@ -616,6 +676,16 @@ export default function SeedMap() {
         <canvas ref={canvasRef} width={VIEW_W} height={VIEW_H} className="seedmap-canvas" />
         <canvas ref={overlayCanvasRef} width={VIEW_W} height={VIEW_H} className="seedmap-overlay" />
         <img ref={compassRef} src={compassSvg} className="seedmap-compass" alt="" />
+        {popup && (
+          <div
+            className="structure-popup"
+            style={{ left: popup.sx, top: popup.sy - 40 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <strong>{popup.label}</strong>
+            <span>X: {popup.x}, Z: {popup.z}</span>
+          </div>
+        )}
       </div>
 
       <div className="seedmap-biome-hover" ref={biomeHoverRef} />
@@ -650,7 +720,7 @@ export default function SeedMap() {
                 opacity: active ? 1 : 0.5,
               }}
             >
-              <img src={compassSvg} alt={s.label} />
+              <img src={s.icon} alt={s.label} />
               <span className="structure-tooltip">{s.label}</span>
             </button>
           )
