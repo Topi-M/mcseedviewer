@@ -150,6 +150,7 @@ const VALID_CUBIOMES_SCALES = [1, 4, 16, 64, 256]
 const FADE_MS = 250
 
 const MC_VERSIONS = [
+  { label: '1.21.11',   value: 28 },
   { label: '1.21.3',   value: 25 },
   { label: '1.21.1',   value: 24 },
   { label: '1.20',     value: 23 },
@@ -213,8 +214,11 @@ function getCubiomesVersion(v) {
   if (v === 21 || v === 22) return 23  // 1.19.2–1.19.4 → 1.20 generaattori
   if (v === 23)             return 25  // 1.20 → 1.21.3 generaattori
   if (v === 24 || v === 25) return 26  // 1.21.1–1.21.3 → MC_1_21_WD generaattori
+  if (v === 28) return 28  // Pale garden versio
   return v
 }
+
+// 28 = Pale garden versio
 
 function tileKey(tx, tz, cubiomesScale, seed, mcVersion) {
   return `${tx}_${tz}_${cubiomesScale}_${seed}_${getCubiomesVersion(mcVersion)}`
@@ -228,7 +232,7 @@ export default function SeedMap() {
   const [error, setError] = useState(null)
   const [seedInput, setSeedInput] = useState('12345')
   const [seed, setSeed] = useState(12345)
-  const [mcVersion, setMcVersion] = useState(25)
+  const [mcVersion, setMcVersion] = useState(28) // 28 = pale garden versio = uusin versio
   const [activeStructures, setActiveStructures] = useState(new Set())
   const [showSpawn, setShowSpawn] = useState(true)
 
