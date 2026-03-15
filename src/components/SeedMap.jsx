@@ -245,8 +245,8 @@ export default function SeedMap() {
   const wasmRef = useRef(null)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(null)
-  const [seedInput, setSeedInput] = useState('12345')
-  const [seed, setSeed] = useState(12345)
+  const [seedInput, setSeedInput] = useState('123456')
+  const [seed, setSeed] = useState(123456)
   const [mcVersion, setMcVersion] = useState(28) // 28 = pale garden versio = uusin versio
   const [activeStructures, setActiveStructures] = useState(new Set())
   const [showSpawn, setShowSpawn] = useState(true)
