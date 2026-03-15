@@ -178,6 +178,8 @@ const MC_VERSIONS = [
   { label: 'Beta 1.7.3', value: 0  },
 ]
 
+const STRONGHOLD_ID = 'stronghold'
+
 const STRUCTURE_TYPES = [
   { id: 5,  label: 'Village',         color: '#ffff00' },
   { id: 1,  label: 'Desert Pyramid',  color: '#ffd700' },
@@ -192,6 +194,7 @@ const STRUCTURE_TYPES = [
   { id: 7,  label: 'Shipwreck',       color: '#deb887' },
   { id: 23, label: 'Trail Ruins',     color: '#cd853f' },
   { id: 24, label: 'Trial Chambers',  color: '#ff8c00' },
+  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff' },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
@@ -254,6 +257,7 @@ export default function SeedMap() {
   const scheduleDrawRef = useRef(null)
   const compassRef = useRef(null)
   const spawnRef = useRef({ x: 0, z: 0 })
+  const strongholdCacheRef = useRef({ seed: null, version: null, positions: [] })
 
   useEffect(() => { activeStructuresRef.current = activeStructures }, [activeStructures])
   useEffect(() => { showSpawnRef.current = showSpawn }, [showSpawn])
@@ -370,7 +374,7 @@ export default function SeedMap() {
       if (overlayCanvasRef.current && wasmRef.current) {
         const octx = overlayCanvasRef.current.getContext('2d')
         octx.clearRect(0, 0, VIEW_W, VIEW_H)
-        const { initGenerator, findStructures, freePtr, HEAP32, malloc, getValue } = wasmRef.current
+        const { initGenerator, findStructures, findStrongholds, freePtr, HEAP32, malloc, getValue } = wasmRef.current
         initGenerator(getCubiomesVersion(mcVersionRef.current), seedRef.current)
         const bx1 = Math.floor(centerX - VIEW_W / 2 / screenPPB)
         const bz1 = Math.floor(centerZ - VIEW_H / 2 / screenPPB)
@@ -380,22 +384,53 @@ export default function SeedMap() {
         for (const st of activeStructuresRef.current) {
           const stInfo = STRUCTURE_TYPES.find(s => s.id === st)
           if (!stInfo) continue
-          const ptr = findStructures(st, getCubiomesVersion(mcVersionRef.current), seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
-          const count = getValue(pCount, 'i32')
-          octx.fillStyle = stInfo.color
-          octx.strokeStyle = '#000'
-          octx.lineWidth = 1
-          for (let i = 0; i < count; i++) {
-            const bx = HEAP32[ptr / 4 + i * 2]
-            const bz = HEAP32[ptr / 4 + i * 2 + 1]
-            const sx = (bx - centerX) * screenPPB + VIEW_W / 2
-            const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
-            octx.beginPath()
-            octx.arc(sx, sy, 5, 0, Math.PI * 2)
-            octx.fill()
-            octx.stroke()
+
+          if (st === STRONGHOLD_ID) {
+            // Cache strongholds - only recompute when seed/version changes
+            const cache = strongholdCacheRef.current
+            const curSeed = seedRef.current
+            const curVer = mcVersionRef.current
+            if (cache.seed !== curSeed || cache.version !== curVer) {
+              const ptr = findStrongholds(getCubiomesVersion(curVer), curSeed, 128, pCount)
+              const count = getValue(pCount, 'i32')
+              const positions = []
+              for (let i = 0; i < count; i++) {
+                positions.push({ x: HEAP32[ptr / 4 + i * 2], z: HEAP32[ptr / 4 + i * 2 + 1] })
+              }
+              if (ptr) freePtr(ptr)
+              strongholdCacheRef.current = { seed: curSeed, version: curVer, positions }
+            }
+            octx.fillStyle = stInfo.color
+            octx.strokeStyle = '#000'
+            octx.lineWidth = 1
+            for (const pos of strongholdCacheRef.current.positions) {
+              const sx = (pos.x - centerX) * screenPPB + VIEW_W / 2
+              const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
+              if (sx > -10 && sx < VIEW_W + 10 && sy > -10 && sy < VIEW_H + 10) {
+                octx.beginPath()
+                octx.arc(sx, sy, 5, 0, Math.PI * 2)
+                octx.fill()
+                octx.stroke()
+              }
+            }
+          } else {
+            const ptr = findStructures(st, getCubiomesVersion(mcVersionRef.current), seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
+            const count = getValue(pCount, 'i32')
+            octx.fillStyle = stInfo.color
+            octx.strokeStyle = '#000'
+            octx.lineWidth = 1
+            for (let i = 0; i < count; i++) {
+              const bx = HEAP32[ptr / 4 + i * 2]
+              const bz = HEAP32[ptr / 4 + i * 2 + 1]
+              const sx = (bx - centerX) * screenPPB + VIEW_W / 2
+              const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
+              octx.beginPath()
+              octx.arc(sx, sy, 5, 0, Math.PI * 2)
+              octx.fill()
+              octx.stroke()
+            }
+            if (ptr) freePtr(ptr)
           }
-          if (ptr) freePtr(ptr)
         }
         freePtr(pCount)
       }
