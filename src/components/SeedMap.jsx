@@ -175,7 +175,7 @@ const MC_VERSIONS = [
   { label: '1.2',      value: 3  },
   { label: '1.1',      value: 2  },
   { label: '1.0',      value: 1  },
-  { label: 'Beta 1.8', value: 0  },
+  { label: 'Beta 1.7.3', value: 0  },
 ]
 
 const STRUCTURE_TYPES = [
