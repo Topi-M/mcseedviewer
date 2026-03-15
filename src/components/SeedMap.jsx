@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import compassSvg from '../assets/compass.svg'
 
 // Structure icons
-import hut from '../assets/hut512.svg'
 import jungleTemple from '../assets/mosscobble512.svg'
 import desertTemple from '../assets/sandstone512.svg'
-import iglooIcon from '../assets/snowball.svg'
-import strongholdIcon from '../assets/stronghold.svg'
-import monumentIcon from '../assets/monument512.svg'
-import ancientCityIcon from '../assets/ancientcity.svg'
+import strongholdIcon from '../assets/eyeofender480.svg'
+import monumentIcon from '../assets/prismarine512.svg'
+import hutIcon from '../assets/hut512.svg'
+import villageIcon from '../assets/hay.svg'
+import mansionIcon from '../assets/darkoak.svg'
+import trialIcon from '../assets/trial.svg'
+
 
 import '../css/SeedMap.css'
 
@@ -193,20 +195,20 @@ const MC_VERSIONS = [
 const STRONGHOLD_ID = 'stronghold'
 
 const STRUCTURE_TYPES = [
-  { id: 5,  label: 'Village',         color: '#ffff00', icon: compassSvg },
+  { id: 5,  label: 'Village',         color: '#ffff00', icon: villageIcon },
   { id: 1,  label: 'Desert Pyramid',  color: '#ffd700', icon: desertTemple },
   { id: 2,  label: 'Jungle Temple',   color: '#32cd32', icon: jungleTemple },
-  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57', icon: compassSvg },
+  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57', icon: hutIcon },
   { id: 4,  label: 'Igloo',           color: '#add8e6', icon: compassSvg },
-  { id: 8,  label: 'Monument',        color: '#00ced1', icon: compassSvg },
-  { id: 9,  label: 'Mansion',         color: '#8b4513', icon: compassSvg },
+  { id: 8,  label: 'Monument',        color: '#00ced1', icon: monumentIcon },
+  { id: 9,  label: 'Mansion',         color: '#8b4513', icon: mansionIcon },
   { id: 10, label: 'Outpost',         color: '#a9a9a9', icon: compassSvg },
   { id: 13, label: 'Ancient City',    color: '#9370db', icon: compassSvg },
   { id: 6,  label: 'Ocean Ruin',      color: '#4169e1', icon: compassSvg },
   { id: 7,  label: 'Shipwreck',       color: '#deb887', icon: compassSvg },
   { id: 23, label: 'Trail Ruins',     color: '#cd853f', icon: compassSvg },
-  { id: 24, label: 'Trial Chambers',  color: '#ff8c00', icon: compassSvg },
-  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: compassSvg },
+  { id: 24, label: 'Trial Chambers',  color: '#ff8c00', icon: trialIcon },
+  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: strongholdIcon },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
@@ -412,6 +414,11 @@ export default function SeedMap() {
           const stInfo = STRUCTURE_TYPES.find(s => s.id === st)
           if (!stInfo) continue
 
+          // Skip structures when zoomed out to avoid lag
+          if (st !== STRONGHOLD_ID && screenPPB < 0.01) continue
+          if (st === 24 && screenPPB < 0.125) continue
+          if (st === 5 && screenPPB < 0.0625) continue
+
           if (st === STRONGHOLD_ID) {
             // Cache strongholds - only recompute when seed/version changes
             const cache = strongholdCacheRef.current
@@ -428,7 +435,7 @@ export default function SeedMap() {
               strongholdCacheRef.current = { seed: curSeed, version: curVer, positions }
             }
             const shImg = structureImagesRef.current[STRONGHOLD_ID]
-            const iconSize = 24
+            const iconSize = 32 // Stronghold koko
             for (const pos of strongholdCacheRef.current.positions) {
               const sx = (pos.x - centerX) * screenPPB + VIEW_W / 2
               const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
@@ -456,7 +463,7 @@ export default function SeedMap() {
               const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
               hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: bx, z: bz })
               if (sImg && sImg.complete) {
-                if (st === 1 || st === 2) {
+                if (st === 1 || st === 2 || st === 5 || st === 8 || st === 9 || st === 24) {
                   octx.strokeStyle = 'white'
                   octx.lineWidth = 2
                   octx.strokeRect(sx - iconSize / 2 - 1, sy - iconSize / 2 - 1, iconSize + 2, iconSize + 2)
