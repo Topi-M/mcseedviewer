@@ -7,10 +7,21 @@
 
 .seedmap-controls {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 8px;
   width: var(--map-w);
+}
+
+.seedmap-controls-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.seedmap-controls-row label {
+  min-width: 55px;
+  font-weight: bold;
 }
 
 .seedmap-controls input {

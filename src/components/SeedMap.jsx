@@ -6,6 +6,9 @@ import hut from '../assets/hut512.svg'
 import jungleTemple from '../assets/mosscobble512.svg'
 import desertTemple from '../assets/sandstone512.svg'
 import iglooIcon from '../assets/snowball.svg'
+import strongholdIcon from '../assets/stronghold.svg'
+import monumentIcon from '../assets/monument512.svg'
+import ancientCityIcon from '../assets/ancientcity.svg'
 
 import '../css/SeedMap.css'
 
@@ -153,7 +156,7 @@ const DEFAULT_COLOR = [100, 100, 100]
 const VIEW_W = 960
 const VIEW_H = 640
 const TILE_PX = 128
-const VALID_CUBIOMES_SCALES = [1, 4, 16, 64, 256]
+const VALID_CUBIOMES_SCALES = [4, 16, 64, 256]
 const FADE_MS = 250
 
 const MC_VERSIONS = [
@@ -193,15 +196,15 @@ const STRUCTURE_TYPES = [
   { id: 2,  label: 'Jungle Temple',   color: '#32cd32', icon: jungleTemple },
   { id: 3,  label: 'Swamp Hut',       color: '#2e8b57', icon: hut },
   { id: 4,  label: 'Igloo',           color: '#add8e6', icon: iglooIcon },
-  { id: 8,  label: 'Monument',        color: '#00ced1', icon: compassSvg },
+  { id: 8,  label: 'Monument',        color: '#00ced1', icon: monumentIcon },
   { id: 9,  label: 'Mansion',         color: '#8b4513', icon: compassSvg },
   { id: 10, label: 'Outpost',         color: '#a9a9a9', icon: compassSvg },
-  { id: 13, label: 'Ancient City',    color: '#9370db', icon: compassSvg },
+  { id: 13, label: 'Ancient City',    color: '#9370db', icon: ancientCityIcon },
   { id: 6,  label: 'Ocean Ruin',      color: '#4169e1', icon: compassSvg },
   { id: 7,  label: 'Shipwreck',       color: '#deb887', icon: compassSvg },
   { id: 23, label: 'Trail Ruins',     color: '#cd853f', icon: compassSvg },
   { id: 24, label: 'Trial Chambers',  color: '#ff8c00', icon: compassSvg },
-  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: compassSvg },
+  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: strongholdIcon },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
@@ -423,18 +426,14 @@ export default function SeedMap() {
               strongholdCacheRef.current = { seed: curSeed, version: curVer, positions }
             }
             const shImg = structureImagesRef.current[STRONGHOLD_ID]
-            const iconSize = 16
+            const iconSize = 24
             for (const pos of strongholdCacheRef.current.positions) {
               const sx = (pos.x - centerX) * screenPPB + VIEW_W / 2
               const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
               if (sx > -iconSize && sx < VIEW_W + iconSize && sy > -iconSize && sy < VIEW_H + iconSize) {
                 hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: pos.x, z: pos.z })
                 if (shImg && shImg.complete) {
-                  octx.shadowColor = 'white'
-                  octx.shadowBlur = 4
                   octx.drawImage(shImg, sx - iconSize / 2, sy - iconSize / 2, iconSize, iconSize)
-                  octx.shadowColor = 'transparent'
-                  octx.shadowBlur = 0
                 } else {
                   octx.fillStyle = stInfo.color
                   octx.beginPath()
@@ -447,7 +446,7 @@ export default function SeedMap() {
             const ptr = findStructures(st, getCubiomesVersion(mcVersionRef.current), seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
             const count = getValue(pCount, 'i32')
             const sImg = structureImagesRef.current[st]
-            const iconSize = 24
+            const iconSize = st === 13 ? 32 : 24
             for (let i = 0; i < count; i++) {
               const bx = HEAP32[ptr / 4 + i * 2]
               const bz = HEAP32[ptr / 4 + i * 2 + 1]
@@ -455,11 +454,12 @@ export default function SeedMap() {
               const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
               hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: bx, z: bz })
               if (sImg && sImg.complete) {
-                octx.shadowColor = 'white'
-                octx.shadowBlur = 4
+                if (st === 1 || st === 2) {
+                  octx.strokeStyle = 'white'
+                  octx.lineWidth = 2
+                  octx.strokeRect(sx - iconSize / 2 - 1, sy - iconSize / 2 - 1, iconSize + 2, iconSize + 2)
+                }
                 octx.drawImage(sImg, sx - iconSize / 2, sy - iconSize / 2, iconSize, iconSize)
-                octx.shadowColor = 'transparent'
-                octx.shadowBlur = 0
               } else {
                 octx.fillStyle = stInfo.color
                 octx.beginPath()
@@ -613,9 +613,16 @@ export default function SeedMap() {
     window.addEventListener('mouseup', onUp)
   }
 
-  function handleGenerate() {
-    const n = parseInt(seedInput)
+  function handleSeedInput(value) {
+    setSeedInput(value)
+    const n = parseInt(value)
     if (!isNaN(n)) setSeed(n)
+  }
+
+  function handleRandomSeed() {
+    const n = Math.floor(Math.random() * 2147483647)
+    setSeedInput(String(n))
+    setSeed(n)
   }
 
   if (error) return <div>WASM error: {error}</div>
@@ -652,18 +659,23 @@ export default function SeedMap() {
   return (
     <div className="seedmap-wrapper" style={{ '--map-w': `${VIEW_W}px` }}>
       <div className="seedmap-controls">
-        <input
-          value={seedInput}
-          onChange={e => setSeedInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleGenerate()}
-          placeholder="Seed..."
-        />
-        <select value={mcVersion} onChange={e => setMcVersion(Number(e.target.value))}>
-          {MC_VERSIONS.map(v => (
-            <option key={v.value} value={v.value}>{v.label}</option>
-          ))}
-        </select>
-        <button onClick={handleGenerate}>Näytä</button>
+        <div className="seedmap-controls-row">
+          <label>Seed</label>
+          <input
+            value={seedInput}
+            onChange={e => handleSeedInput(e.target.value)}
+            placeholder="Seed..."
+          />
+          <button onClick={handleRandomSeed}>Random</button>
+        </div>
+        <div className="seedmap-controls-row">
+          <label>Version</label>
+          <select value={mcVersion} onChange={e => setMcVersion(Number(e.target.value))}>
+            {MC_VERSIONS.map(v => (
+              <option key={v.value} value={v.value}>{v.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div
