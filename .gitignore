@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 .claude
+vanhatassets
 
 # Cubiomes source (clone separately, see README)
 wasm/cubiomes/

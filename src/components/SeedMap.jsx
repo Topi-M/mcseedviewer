@@ -77,10 +77,11 @@ const BIOME_COLORS = {
   127: [0,   0,   0],   // the void
   // Mutated variants (128+)
   129: [213, 237, 126],  // sunflower plains
-  130: [128, 128, 128], // gravelly mountains (windswept gravelly hills)
-  131: [47,  128, 36],  // flower forest
-  132: [49,  102, 89],  // taiga mountains
-  133: [34,  108, 77],  // swamp hills
+  130: [250, 190, 77],  // desert lakes
+  131: [128, 128, 128], // windswept gravelly hills
+  132: [47,  128, 36],  // flower forest
+  133: [49,  102, 89],  // taiga mountains
+  134: [34,  108, 77],  // swamp hills
   140: [178, 220, 255], // ice spikes
   149: [109, 119, 7],   // modified jungle
   151: [119, 136, 24],  // modified jungle edge
@@ -135,8 +136,9 @@ const BIOME_NAMES = {
   40: 'Small End Islands', 41: 'End Midlands', 42: 'End Highlands', 43: 'End Barrens',
   44: 'Warm Ocean', 45: 'Lukewarm Ocean', 46: 'Cold Ocean', 47: 'Deep Warm Ocean',
   48: 'Deep Lukewarm Ocean', 49: 'Deep Cold Ocean', 50: 'Deep Frozen Ocean',
-  127: 'The Void', 129: 'Sunflower Plains', 130: 'Windswept Gravelly Hills',
-  131: 'Flower Forest', 132: 'Taiga Mountains', 133: 'Swamp Hills', 140: 'Ice Spikes',
+  127: 'The Void', 129: 'Sunflower Plains', 130: 'Desert Lakes',
+  131: 'Windswept Gravelly Hills', 132: 'Flower Forest', 133: 'Taiga Mountains',
+  134: 'Swamp Hills', 140: 'Ice Spikes',
   149: 'Modified Jungle', 151: 'Modified Jungle Edge', 155: 'Old Growth Birch Forest',
   156: 'Tall Birch Hills', 157: 'Dark Forest Hills', 158: 'Snowy Taiga Mountains',
   160: 'Old Growth Spruce Taiga', 161: 'Giant Spruce Taiga Hills',
@@ -194,17 +196,17 @@ const STRUCTURE_TYPES = [
   { id: 5,  label: 'Village',         color: '#ffff00', icon: compassSvg },
   { id: 1,  label: 'Desert Pyramid',  color: '#ffd700', icon: desertTemple },
   { id: 2,  label: 'Jungle Temple',   color: '#32cd32', icon: jungleTemple },
-  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57', icon: hut },
-  { id: 4,  label: 'Igloo',           color: '#add8e6', icon: iglooIcon },
-  { id: 8,  label: 'Monument',        color: '#00ced1', icon: monumentIcon },
+  { id: 3,  label: 'Swamp Hut',       color: '#2e8b57', icon: compassSvg },
+  { id: 4,  label: 'Igloo',           color: '#add8e6', icon: compassSvg },
+  { id: 8,  label: 'Monument',        color: '#00ced1', icon: compassSvg },
   { id: 9,  label: 'Mansion',         color: '#8b4513', icon: compassSvg },
   { id: 10, label: 'Outpost',         color: '#a9a9a9', icon: compassSvg },
-  { id: 13, label: 'Ancient City',    color: '#9370db', icon: ancientCityIcon },
+  { id: 13, label: 'Ancient City',    color: '#9370db', icon: compassSvg },
   { id: 6,  label: 'Ocean Ruin',      color: '#4169e1', icon: compassSvg },
   { id: 7,  label: 'Shipwreck',       color: '#deb887', icon: compassSvg },
   { id: 23, label: 'Trail Ruins',     color: '#cd853f', icon: compassSvg },
   { id: 24, label: 'Trial Chambers',  color: '#ff8c00', icon: compassSvg },
-  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: strongholdIcon },
+  { id: STRONGHOLD_ID, label: 'Stronghold', color: '#ff00ff', icon: compassSvg },
 ]
 
 // Pick smallest cubiomes scale where 1 cubiomes pixel >= 1 screen pixel
@@ -698,9 +700,8 @@ export default function SeedMap() {
             <span>X: {popup.x}, Z: {popup.z}</span>
           </div>
         )}
+        <div className="seedmap-biome-hover" ref={biomeHoverRef} />
       </div>
-
-      <div className="seedmap-biome-hover" ref={biomeHoverRef} />
 
       <div className="seedmap-structures">
         <button
