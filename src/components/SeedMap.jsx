@@ -272,6 +272,7 @@ export default function SeedMap() {
   const compassRef = useRef(null)
   const spawnRef = useRef({ x: 0, z: 0 })
   const strongholdCacheRef = useRef({ seed: null, version: null, positions: [] })
+  const structureCacheRef = useRef({}) // { [st]: { seed, version, bx1, bz1, bx2, bz2, positions } }
   const structureHitboxesRef = useRef([])  // [{sx, sy, size, label, x, z}]
   const [popup, setPopup] = useState(null) // {sx, sy, label, x, z}
 
@@ -452,16 +453,36 @@ export default function SeedMap() {
               }
             }
           } else {
-            const ptr = findStructures(st, getCubiomesVersion(mcVersionRef.current), seedRef.current, bx1, bz1, bx2, bz2, 1, pCount)
-            const count = getValue(pCount, 'i32')
+            const curSeed = seedRef.current
+            const curVer = mcVersionRef.current
+            const cached = structureCacheRef.current[st]
+            const margin = Math.max((bx2 - bx1), (bz2 - bz1))
+            const needsFetch = !cached
+              || cached.seed !== curSeed
+              || cached.version !== curVer
+              || bx1 < cached.bx1 || bz1 < cached.bz1
+              || bx2 > cached.bx2 || bz2 > cached.bz2
+            if (needsFetch) {
+              const cbx1 = bx1 - margin
+              const cbz1 = bz1 - margin
+              const cbx2 = bx2 + margin
+              const cbz2 = bz2 + margin
+              const ptr = findStructures(st, getCubiomesVersion(curVer), curSeed, cbx1, cbz1, cbx2, cbz2, 1, pCount)
+              const count = getValue(pCount, 'i32')
+              const positions = []
+              for (let i = 0; i < count; i++) {
+                positions.push({ x: HEAP32[ptr / 4 + i * 2], z: HEAP32[ptr / 4 + i * 2 + 1] })
+              }
+              if (ptr) freePtr(ptr)
+              structureCacheRef.current[st] = { seed: curSeed, version: curVer, bx1: cbx1, bz1: cbz1, bx2: cbx2, bz2: cbz2, positions }
+            }
             const sImg = structureImagesRef.current[st]
             const iconSize = st === 13 ? 32 : 24
-            for (let i = 0; i < count; i++) {
-              const bx = HEAP32[ptr / 4 + i * 2]
-              const bz = HEAP32[ptr / 4 + i * 2 + 1]
-              const sx = (bx - centerX) * screenPPB + VIEW_W / 2
-              const sy = (bz - centerZ) * screenPPB + VIEW_H / 2
-              hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: bx, z: bz })
+            for (const pos of structureCacheRef.current[st].positions) {
+              if (pos.x < bx1 || pos.x > bx2 || pos.z < bz1 || pos.z > bz2) continue
+              const sx = (pos.x - centerX) * screenPPB + VIEW_W / 2
+              const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
+              hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: pos.x, z: pos.z })
               if (sImg && sImg.complete) {
                 if (st === 1 || st === 2 || st === 5 || st === 8 || st === 9 || st === 24) {
                   octx.strokeStyle = 'white'
@@ -476,7 +497,6 @@ export default function SeedMap() {
                 octx.fill()
               }
             }
-            if (ptr) freePtr(ptr)
           }
         }
         freePtr(pCount)
