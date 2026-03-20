@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import compassSvg from '../assets/compass.svg'
+import MapSettings from './MapSettings'
 
 // Structure icons
 import jungleTemple from '../assets/mosscobble512.svg'
@@ -237,6 +238,15 @@ function getCubiomesVersion(v) {
 
 // 28 = Pale garden versio
 
+// Jakaa 64-bittisen BigInt-seedin kahdeksi 32-bittiseksi osaksi WASM:lle
+function splitSeed(seed) {
+  const big = BigInt.asIntN(64, seed)
+  const mask32 = 0xFFFFFFFFn
+  const lo = Number(big & mask32)
+  const hi = Number((big >> 32n) & mask32)
+  return [lo, hi]
+}
+
 function tileKey(tx, tz, cubiomesScale, seed, mcVersion) {
   return `${tx}_${tz}_${cubiomesScale}_${seed}_${getCubiomesVersion(mcVersion)}`
 }
@@ -248,10 +258,11 @@ export default function SeedMap() {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(null)
   const [seedInput, setSeedInput] = useState('123456')
-  const [seed, setSeed] = useState(123456)
+  const [seed, setSeed] = useState(123456n)
   const [mcVersion, setMcVersion] = useState(28) // 28 = pale garden versio = uusin versio
   const [activeStructures, setActiveStructures] = useState(new Set())
   const [showSpawn, setShowSpawn] = useState(true)
+  const [showRegions, setShowRegions] = useState(false)
 
   // View: centerX/Z in world blocks, screenPPB = screen pixels per block
   const viewRef = useRef({ centerX: 0, centerZ: 0, screenPPB: 0.25 })
@@ -263,10 +274,11 @@ export default function SeedMap() {
   const biomeHoverRef = useRef(null)
   const dragRef = useRef(null)
   const rafRef = useRef(null)
-  const seedRef = useRef(seed)
+  const seedRef = useRef(123456n)
   const mcVersionRef = useRef(mcVersion)
   const activeStructuresRef = useRef(new Set())
   const showSpawnRef = useRef(true)
+  const showRegionsRef = useRef(false)
   const drawFrameRef = useRef(null)
   const scheduleDrawRef = useRef(null)
   const compassRef = useRef(null)
@@ -290,6 +302,7 @@ export default function SeedMap() {
 
   useEffect(() => { activeStructuresRef.current = activeStructures }, [activeStructures])
   useEffect(() => { showSpawnRef.current = showSpawn }, [showSpawn])
+  useEffect(() => { showRegionsRef.current = showRegions }, [showRegions])
 
   useEffect(() => { seedRef.current = seed }, [seed])
   useEffect(() => { mcVersionRef.current = mcVersion }, [mcVersion])
@@ -299,13 +312,13 @@ export default function SeedMap() {
       const malloc = instance.cwrap('malloc', 'number', ['number'])
       const free   = instance.cwrap('freePtr', null, ['number'])
       wasmRef.current = {
-        initGenerator:  instance.cwrap('initGenerator', null, ['number', 'number']),
+        initGenerator:  instance.cwrap('initGenerator', null, ['number', 'number', 'number']),
         getBiomeMap:    instance.cwrap('getBiomeMap', 'number', ['number', 'number', 'number', 'number', 'number']),
         freePtr:        free,
-        getSpawnPoint:  instance.cwrap('getSpawnPoint', null, ['number', 'number', 'number', 'number']),
-        findStructures: instance.cwrap('findStructures', 'number', ['number','number','number','number','number','number','number','number','number']),
-        findStrongholds:instance.cwrap('findStrongholds', 'number', ['number','number','number','number']),
-        checkSlimeChunk:instance.cwrap('checkSlimeChunk', 'number', ['number','number','number']),
+        getSpawnPoint:  instance.cwrap('getSpawnPoint', null, ['number', 'number', 'number', 'number', 'number']),
+        findStructures: instance.cwrap('findStructures', 'number', ['number','number','number','number','number','number','number','number','number','number']),
+        findStrongholds:instance.cwrap('findStrongholds', 'number', ['number','number','number','number','number']),
+        checkSlimeChunk:instance.cwrap('checkSlimeChunk', 'number', ['number','number','number','number']),
         malloc,
         HEAP32:         instance.HEAP32,
         getValue:       instance.getValue,
@@ -313,7 +326,8 @@ export default function SeedMap() {
 
       // Hae spawn heti kun WASM on ladattu
       const pX = malloc(4), pZ = malloc(4)
-      wasmRef.current.getSpawnPoint(48, seedRef.current, pX, pZ)
+      const [sLo, sHi] = splitSeed(seedRef.current)
+      wasmRef.current.getSpawnPoint(48, sLo, sHi, pX, pZ)
       spawnRef.current = { x: instance.getValue(pX, 'i32'), z: instance.getValue(pZ, 'i32') }
       free(pX); free(pZ)
 
@@ -329,7 +343,8 @@ export default function SeedMap() {
       const offscreen = new OffscreenCanvas(TILE_PX, TILE_PX)
       const octx = offscreen.getContext('2d')
 
-      initGenerator(getCubiomesVersion(mcVersionRef.current), seedRef.current)
+      const [sLo, sHi] = splitSeed(seedRef.current)
+      initGenerator(getCubiomesVersion(mcVersionRef.current), sLo, sHi)
       const ptr = getBiomeMap(tx * TILE_PX, tz * TILE_PX, TILE_PX, TILE_PX, cubiomesScale)
 
       const imageData = octx.createImageData(TILE_PX, TILE_PX)
@@ -404,8 +419,55 @@ export default function SeedMap() {
       if (overlayCanvasRef.current && wasmRef.current) {
         const octx = overlayCanvasRef.current.getContext('2d')
         octx.clearRect(0, 0, VIEW_W, VIEW_H)
+
+        // Piirrä region-reunat (512x512 blokkia)
+        if (showRegionsRef.current) {
+          const REGION_SIZE = 512
+          const regionWorldLeft = centerX - VIEW_W / 2 / screenPPB
+          const regionWorldRight = centerX + VIEW_W / 2 / screenPPB
+          const regionWorldTop = centerZ - VIEW_H / 2 / screenPPB
+          const regionWorldBottom = centerZ + VIEW_H / 2 / screenPPB
+
+          const rxMin = Math.floor(regionWorldLeft / REGION_SIZE)
+          const rxMax = Math.ceil(regionWorldRight / REGION_SIZE)
+          const rzMin = Math.floor(regionWorldTop / REGION_SIZE)
+          const rzMax = Math.ceil(regionWorldBottom / REGION_SIZE)
+
+          octx.strokeStyle = 'rgba(255, 0, 0, 0.45)'
+          octx.lineWidth = 1
+          octx.font = '11px monospace'
+          octx.fillStyle = 'rgba(255, 0, 0, 0.7)'
+
+          // Pystyviivat
+          for (let rx = rxMin; rx <= rxMax; rx++) {
+            const sx = (rx * REGION_SIZE - centerX) * screenPPB + VIEW_W / 2
+            octx.beginPath()
+            octx.moveTo(sx, 0)
+            octx.lineTo(sx, VIEW_H)
+            octx.stroke()
+          }
+          // Vaakaviivat
+          for (let rz = rzMin; rz <= rzMax; rz++) {
+            const sy = (rz * REGION_SIZE - centerZ) * screenPPB + VIEW_H / 2
+            octx.beginPath()
+            octx.moveTo(0, sy)
+            octx.lineTo(VIEW_W, sy)
+            octx.stroke()
+          }
+          // Region-labelit vasempaan yläkulmaan
+          for (let rx = rxMin; rx <= rxMax; rx++) {
+            for (let rz = rzMin; rz <= rzMax; rz++) {
+              const sx = (rx * REGION_SIZE - centerX) * screenPPB + VIEW_W / 2
+              const sy = (rz * REGION_SIZE - centerZ) * screenPPB + VIEW_H / 2
+              if (sx > -50 && sx < VIEW_W && sy > 0 && sy < VIEW_H) {
+                octx.fillText(`r.${rx}.${rz}`, sx + 3, sy + 13)
+              }
+            }
+          }
+        }
         const { initGenerator, findStructures, findStrongholds, freePtr, HEAP32, malloc, getValue } = wasmRef.current
-        initGenerator(getCubiomesVersion(mcVersionRef.current), seedRef.current)
+        const [sLo, sHi] = splitSeed(seedRef.current)
+        initGenerator(getCubiomesVersion(mcVersionRef.current), sLo, sHi)
         const bx1 = Math.floor(centerX - VIEW_W / 2 / screenPPB)
         const bz1 = Math.floor(centerZ - VIEW_H / 2 / screenPPB)
         const bx2 = Math.ceil(centerX + VIEW_W / 2 / screenPPB)
@@ -426,7 +488,8 @@ export default function SeedMap() {
             const curSeed = seedRef.current
             const curVer = mcVersionRef.current
             if (cache.seed !== curSeed || cache.version !== curVer) {
-              const ptr = findStrongholds(getCubiomesVersion(curVer), curSeed, 128, pCount)
+              const [shLo, shHi] = splitSeed(curSeed)
+              const ptr = findStrongholds(getCubiomesVersion(curVer), shLo, shHi, 128, pCount)
               const count = getValue(pCount, 'i32')
               const positions = []
               for (let i = 0; i < count; i++) {
@@ -467,7 +530,8 @@ export default function SeedMap() {
               const cbz1 = bz1 - margin
               const cbx2 = bx2 + margin
               const cbz2 = bz2 + margin
-              const ptr = findStructures(st, getCubiomesVersion(curVer), curSeed, cbx1, cbz1, cbx2, cbz2, 1, pCount)
+              const [stLo, stHi] = splitSeed(curSeed)
+              const ptr = findStructures(st, getCubiomesVersion(curVer), stLo, stHi, cbx1, cbz1, cbx2, cbz2, 1, pCount)
               const count = getValue(pCount, 'i32')
               const positions = []
               for (let i = 0; i < count; i++) {
@@ -554,7 +618,8 @@ export default function SeedMap() {
     if (wasmRef.current) {
       const { getSpawnPoint, malloc, freePtr, getValue } = wasmRef.current
       const pX = malloc(4), pZ = malloc(4)
-      getSpawnPoint(getCubiomesVersion(mcVersionRef.current), seedRef.current, pX, pZ)
+      const [spLo, spHi] = splitSeed(seedRef.current)
+      getSpawnPoint(getCubiomesVersion(mcVersionRef.current), spLo, spHi, pX, pZ)
       spawnRef.current = { x: getValue(pX, 'i32'), z: getValue(pZ, 'i32') }
       freePtr(pX); freePtr(pZ)
     }
@@ -644,12 +709,22 @@ export default function SeedMap() {
 
   function handleSeedInput(value) {
     setSeedInput(value)
-    const n = parseInt(value)
-    if (!isNaN(n)) setSeed(n)
+  }
+
+  function applySeed() {
+    const trimmed = seedInput.trim()
+    try {
+      const n = BigInt(trimmed)
+      setSeed(n)
+    } catch {
+      // ei validi numero
+    }
   }
 
   function handleRandomSeed() {
-    const n = Math.floor(Math.random() * 2147483647)
+    const lo = BigInt(Math.floor(Math.random() * 0x100000000))
+    const hi = BigInt(Math.floor(Math.random() * 0x100000000))
+    const n = BigInt.asIntN(64, (hi << 32n) | lo)
     setSeedInput(String(n))
     setSeed(n)
   }
@@ -693,8 +768,10 @@ export default function SeedMap() {
           <input
             value={seedInput}
             onChange={e => handleSeedInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') applySeed() }}
             placeholder="Seed..."
           />
+          <button onClick={applySeed}>Go</button>
           <button onClick={handleRandomSeed}>Random</button>
         </div>
         <div className="seedmap-controls-row">
@@ -766,6 +843,15 @@ export default function SeedMap() {
           )
         })}
       </div>
+
+      <MapSettings
+        showRegions={showRegions}
+        onToggleRegions={() => {
+          setShowRegions(v => !v)
+          showRegionsRef.current = !showRegionsRef.current
+          if (scheduleDrawRef.current) scheduleDrawRef.current()
+        }}
+      />
     </div>
   )
 }

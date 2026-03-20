@@ -7,10 +7,15 @@
 
 static Generator g;
 
+// Yhdistää kaksi 32-bittistä osaa 64-bittiseksi seediksi
+static inline uint64_t combineSeed(int lo, int hi) {
+    return ((uint64_t)(uint32_t)hi << 32) | (uint64_t)(uint32_t)lo;
+}
+
 EMSCRIPTEN_KEEPALIVE
-void initGenerator(int mcVersion, int seed) {
+void initGenerator(int mcVersion, int seedLo, int seedHi) {
     setupGenerator(&g, mcVersion, 0);
-    applySeed(&g, DIM_OVERWORLD, (uint64_t)(int64_t)seed);
+    applySeed(&g, DIM_OVERWORLD, combineSeed(seedLo, seedHi));
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -37,11 +42,12 @@ void freePtr(void* ptr) {
 
 // Returns estimated spawn point for the current generator state
 EMSCRIPTEN_KEEPALIVE
-void getSpawnPoint(int mcVersion, int seed, int* outX, int* outZ) {
+void getSpawnPoint(int mcVersion, int seedLo, int seedHi, int* outX, int* outZ) {
+    uint64_t seed = combineSeed(seedLo, seedHi);
     Generator sg;
     setupGenerator(&sg, mcVersion, 0);
-    applySeed(&sg, DIM_OVERWORLD, (uint64_t)(int64_t)seed);
-    uint64_t rng = (uint64_t)(int64_t)seed;
+    applySeed(&sg, DIM_OVERWORLD, seed);
+    uint64_t rng = seed;
     Pos spawn = estimateSpawn(&sg, &rng);
     *outX = spawn.x;
     *outZ = spawn.z;
@@ -52,9 +58,10 @@ void getSpawnPoint(int mcVersion, int seed, int* outX, int* outZ) {
 // Caller must free the returned pointer.
 // biomeCheck=1 enables biome validation (slower but accurate).
 EMSCRIPTEN_KEEPALIVE
-int* findStructures(int structType, int mcVersion, int seed,
+int* findStructures(int structType, int mcVersion, int seedLo, int seedHi,
                     int blockX1, int blockZ1, int blockX2, int blockZ2,
                     int biomeCheck, int* outCount) {
+    uint64_t seed = combineSeed(seedLo, seedHi);
     StructureConfig sc;
     if (!getStructureConfig(structType, mcVersion, &sc)) {
         *outCount = 0;
@@ -74,7 +81,7 @@ int* findStructures(int structType, int mcVersion, int seed,
     for (int rx = regX1; rx <= regX2; rx++) {
         for (int rz = regZ1; rz <= regZ2; rz++) {
             Pos pos;
-            if (!getStructurePos(structType, mcVersion, (uint64_t)(int64_t)seed, rx, rz, &pos))
+            if (!getStructurePos(structType, mcVersion, seed, rx, rz, &pos))
                 continue;
             if (pos.x < blockX1 || pos.x > blockX2 || pos.z < blockZ1 || pos.z > blockZ2)
                 continue;
@@ -124,16 +131,17 @@ int* findStructures(int structType, int mcVersion, int seed,
 // Find first N strongholds. Returns malloc'd int array [x0,z0, x1,z1, ...].
 // Caller must free the returned pointer.
 EMSCRIPTEN_KEEPALIVE
-int* findStrongholds(int mcVersion, int seed, int maxCount, int* outCount) {
+int* findStrongholds(int mcVersion, int seedLo, int seedHi, int maxCount, int* outCount) {
+    uint64_t seed = combineSeed(seedLo, seedHi);
     Generator sg;
     setupGenerator(&sg, mcVersion, 0);
-    applySeed(&sg, DIM_OVERWORLD, (uint64_t)(int64_t)seed);
+    applySeed(&sg, DIM_OVERWORLD, seed);
 
     int* results = (int*)malloc(maxCount * 2 * sizeof(int));
     int count = 0;
 
     StrongholdIter sh;
-    initFirstStronghold(&sh, mcVersion, (uint64_t)(int64_t)seed);
+    initFirstStronghold(&sh, mcVersion, seed);
     while (count < maxCount) {
         int more = nextStronghold(&sh, &sg);
         results[count * 2 + 0] = sh.pos.x;
@@ -148,6 +156,6 @@ int* findStrongholds(int mcVersion, int seed, int maxCount, int* outCount) {
 
 // Returns 1 if the chunk is a slime chunk, 0 otherwise.
 EMSCRIPTEN_KEEPALIVE
-int checkSlimeChunk(int seed, int chunkX, int chunkZ) {
-    return isSlimeChunk((uint64_t)(int64_t)seed, chunkX, chunkZ);
+int checkSlimeChunk(int seedLo, int seedHi, int chunkX, int chunkZ) {
+    return isSlimeChunk(combineSeed(seedLo, seedHi), chunkX, chunkZ);
 }
