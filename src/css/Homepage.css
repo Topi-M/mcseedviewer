@@ -24,3 +24,20 @@
   color: white;
   font-size: 1.5rem;
 }
+
+.site-footer {
+  text-align: center;
+  color: #888;
+  font-size: 0.8rem;
+  padding: 16px 0;
+  margin-top: 16px;
+}
+
+.site-footer a {
+  color: #5b9bd5;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}

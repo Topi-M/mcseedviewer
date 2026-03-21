@@ -264,6 +264,7 @@ export default function SeedMap() {
   const [showSpawn, setShowSpawn] = useState(true)
   const [showRegions, setShowRegions] = useState(false)
   const [showCoords, setShowCoords] = useState(true)
+  const [useCircleIcons, setUseCircleIcons] = useState(false)
 
   // View: centerX/Z in world blocks, screenPPB = screen pixels per block
   const viewRef = useRef({ centerX: 0, centerZ: 0, screenPPB: 0.25 })
@@ -281,6 +282,7 @@ export default function SeedMap() {
   const showSpawnRef = useRef(true)
   const showRegionsRef = useRef(false)
   const showCoordsRef = useRef(true)
+  const useCircleIconsRef = useRef(false)
   const drawFrameRef = useRef(null)
   const scheduleDrawRef = useRef(null)
   const compassRef = useRef(null)
@@ -306,6 +308,7 @@ export default function SeedMap() {
   useEffect(() => { showSpawnRef.current = showSpawn }, [showSpawn])
   useEffect(() => { showRegionsRef.current = showRegions }, [showRegions])
   useEffect(() => { showCoordsRef.current = showCoords }, [showCoords])
+  useEffect(() => { useCircleIconsRef.current = useCircleIcons }, [useCircleIcons])
 
   useEffect(() => { seedRef.current = seed }, [seed])
   useEffect(() => { mcVersionRef.current = mcVersion }, [mcVersion])
@@ -567,13 +570,16 @@ export default function SeedMap() {
               const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
               if (sx > -iconSize && sx < VIEW_W + iconSize && sy > -iconSize && sy < VIEW_H + iconSize) {
                 hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: pos.x, z: pos.z })
-                if (shImg && shImg.complete) {
+                if (!useCircleIconsRef.current && shImg && shImg.complete) {
                   octx.drawImage(shImg, sx - iconSize / 2, sy - iconSize / 2, iconSize, iconSize)
                 } else {
                   octx.fillStyle = stInfo.color
                   octx.beginPath()
-                  octx.arc(sx, sy, 5, 0, Math.PI * 2)
+                  octx.arc(sx, sy, 6, 0, Math.PI * 2)
                   octx.fill()
+                  octx.strokeStyle = 'white'
+                  octx.lineWidth = 1.5
+                  octx.stroke()
                 }
               }
             }
@@ -609,7 +615,7 @@ export default function SeedMap() {
               const sx = (pos.x - centerX) * screenPPB + VIEW_W / 2
               const sy = (pos.z - centerZ) * screenPPB + VIEW_H / 2
               hitboxes.push({ sx, sy, size: iconSize, label: stInfo.label, x: pos.x, z: pos.z })
-              if (sImg && sImg.complete) {
+              if (!useCircleIconsRef.current && sImg && sImg.complete) {
                 if (st === 1 || st === 2 || st === 5 || st === 8 || st === 9 || st === 24) {
                   octx.strokeStyle = 'white'
                   octx.lineWidth = 2
@@ -619,8 +625,11 @@ export default function SeedMap() {
               } else {
                 octx.fillStyle = stInfo.color
                 octx.beginPath()
-                octx.arc(sx, sy, 5, 0, Math.PI * 2)
+                octx.arc(sx, sy, 6, 0, Math.PI * 2)
                 octx.fill()
+                octx.strokeStyle = 'white'
+                octx.lineWidth = 1.5
+                octx.stroke()
               }
             }
           }
@@ -773,13 +782,23 @@ export default function SeedMap() {
     setSeedInput(value)
   }
 
+  function javaStringHashCode(str) {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      hash = (Math.imul(hash, 31) + str.charCodeAt(i)) | 0
+    }
+    return hash
+  }
+
   function applySeed() {
     const trimmed = seedInput.trim()
+    if (trimmed === '') return
     try {
       const n = BigInt(trimmed)
       setSeed(n)
     } catch {
-      // ei validi numero
+      const hash = javaStringHashCode(trimmed)
+      setSeed(BigInt(hash))
     }
   }
 
@@ -807,11 +826,12 @@ export default function SeedMap() {
     const biomeId = HEAP32[ptr / 4]
     freePtr(ptr)
     const name = BIOME_NAMES[biomeId] ?? `Unknown (${biomeId})`
-    biomeHoverRef.current.textContent = `${bx}, ${bz} — ${name}`
+    const [r, g, b] = BIOME_COLORS[biomeId] ?? DEFAULT_COLOR
+    biomeHoverRef.current.innerHTML = `${bx}, ${bz} — <span class="biome-color-swatch" style="background:rgb(${r},${g},${b})"></span>${name}`
   }
 
   function onHoverLeave() {
-    if (biomeHoverRef.current) biomeHoverRef.current.textContent = ''
+    if (biomeHoverRef.current) biomeHoverRef.current.innerHTML = ''
   }
 
   function toggleStructure(id) {
@@ -867,43 +887,49 @@ export default function SeedMap() {
             <span>X: {popup.x}, Z: {popup.z}</span>
           </div>
         )}
+        <div className="seedmap-seed-label">
+          Seed: {String(seed)} for Java Minecraft {MC_VERSIONS.find(v => v.value === mcVersion)?.label}
+        </div>
       </div>
 
-      <div className="seedmap-structures">
-        <button
-          className="structure-btn"
-          onClick={() => {
-            showSpawnRef.current = !showSpawn
-            setShowSpawn(!showSpawn)
-            if (scheduleDrawRef.current) scheduleDrawRef.current()
-          }}
-          style={{
-            border: `2px solid #ff4444`,
-            background: showSpawn ? '#ff4444' : 'transparent',
-            opacity: showSpawn ? 1 : 0.5,
-          }}
-        >
-          <img src={compassSvg} alt="Spawn" />
-          <span className="structure-tooltip">Spawn</span>
-        </button>
-        {STRUCTURE_TYPES.map(s => {
-          const active = activeStructures.has(s.id)
-          return (
-            <button
-              key={s.id}
-              className="structure-btn"
-              onClick={() => toggleStructure(s.id)}
-              style={{
-                border: `2px solid ${s.color}`,
-                background: active ? s.color : 'transparent',
-                opacity: active ? 1 : 0.5,
-              }}
-            >
-              <img src={s.icon} alt={s.label} />
-              <span className="structure-tooltip">{s.label}</span>
-            </button>
-          )
-        })}
+      <div className="map-settings">
+        <div className="map-settings-title">Structures</div>
+        <div className="seedmap-structures">
+          <button
+            className="structure-btn"
+            onClick={() => {
+              showSpawnRef.current = !showSpawn
+              setShowSpawn(!showSpawn)
+              if (scheduleDrawRef.current) scheduleDrawRef.current()
+            }}
+            style={{
+              border: `2px solid #ff4444`,
+              background: showSpawn ? '#ff4444' : 'transparent',
+              opacity: showSpawn ? 1 : 0.5,
+            }}
+          >
+            <img src={compassSvg} alt="Spawn" />
+            <span className="structure-tooltip">Spawn</span>
+          </button>
+          {STRUCTURE_TYPES.map(s => {
+            const active = activeStructures.has(s.id)
+            return (
+              <button
+                key={s.id}
+                className="structure-btn"
+                onClick={() => toggleStructure(s.id)}
+                style={{
+                  border: `2px solid ${s.color}`,
+                  background: active ? s.color : 'transparent',
+                  opacity: active ? 1 : 0.5,
+                }}
+              >
+                <img src={s.icon} alt={s.label} />
+                <span className="structure-tooltip">{s.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <MapSettings
@@ -917,6 +943,12 @@ export default function SeedMap() {
         onToggleCoords={() => {
           setShowCoords(v => !v)
           showCoordsRef.current = !showCoordsRef.current
+          if (scheduleDrawRef.current) scheduleDrawRef.current()
+        }}
+        useCircleIcons={useCircleIcons}
+        onToggleCircleIcons={() => {
+          setUseCircleIcons(v => !v)
+          useCircleIconsRef.current = !useCircleIconsRef.current
           if (scheduleDrawRef.current) scheduleDrawRef.current()
         }}
       />

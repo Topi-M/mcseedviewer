@@ -9,6 +9,9 @@ function Homepage() {
           Minecraft seed viewer
         </div>
         <SeedMap />
+        <footer className="site-footer">
+          Biome and structure map powered by <a href="https://github.com/Cubitect/cubiomes" target="_blank" rel="noopener noreferrer">Cubiomes</a>
+        </footer>
       </div>
     </div>
   )
