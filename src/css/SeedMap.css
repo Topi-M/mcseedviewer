@@ -106,16 +106,13 @@ body {
 }
 
 .seedmap-biome-hover {
-  position: absolute;
-  top: 6px;
-  right: 8px;
   font-size: 0.8rem;
   color: #fff;
   background: rgba(0, 0, 0, 0.6);
   padding: 3px 8px;
   border-radius: 4px;
-  pointer-events: none;
-  z-index: 10;
+  height: 1.2em;
+  align-self: flex-end;
 }
 
 .seedmap-structures {

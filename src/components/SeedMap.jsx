@@ -263,6 +263,7 @@ export default function SeedMap() {
   const [activeStructures, setActiveStructures] = useState(new Set())
   const [showSpawn, setShowSpawn] = useState(true)
   const [showRegions, setShowRegions] = useState(false)
+  const [showCoords, setShowCoords] = useState(true)
 
   // View: centerX/Z in world blocks, screenPPB = screen pixels per block
   const viewRef = useRef({ centerX: 0, centerZ: 0, screenPPB: 0.25 })
@@ -279,6 +280,7 @@ export default function SeedMap() {
   const activeStructuresRef = useRef(new Set())
   const showSpawnRef = useRef(true)
   const showRegionsRef = useRef(false)
+  const showCoordsRef = useRef(true)
   const drawFrameRef = useRef(null)
   const scheduleDrawRef = useRef(null)
   const compassRef = useRef(null)
@@ -303,6 +305,7 @@ export default function SeedMap() {
   useEffect(() => { activeStructuresRef.current = activeStructures }, [activeStructures])
   useEffect(() => { showSpawnRef.current = showSpawn }, [showSpawn])
   useEffect(() => { showRegionsRef.current = showRegions }, [showRegions])
+  useEffect(() => { showCoordsRef.current = showCoords }, [showCoords])
 
   useEffect(() => { seedRef.current = seed }, [seed])
   useEffect(() => { mcVersionRef.current = mcVersion }, [mcVersion])
@@ -419,6 +422,65 @@ export default function SeedMap() {
       if (overlayCanvasRef.current && wasmRef.current) {
         const octx = overlayCanvasRef.current.getContext('2d')
         octx.clearRect(0, 0, VIEW_W, VIEW_H)
+
+        // Piirrä koordinaattimerkinnät reunoille
+        if (showCoordsRef.current) {
+          const worldWidth = VIEW_W / screenPPB
+          const worldHeight = VIEW_H / screenPPB
+          // Valitse sopiva väli koordinaateille
+          const rawStep = worldWidth / 6
+          const mag = Math.pow(10, Math.floor(Math.log10(rawStep)))
+          const nice = [1, 2, 5, 10].find(n => n * mag >= rawStep) * mag
+          const step = nice
+
+          const worldLeft = centerX - VIEW_W / 2 / screenPPB
+          const worldTop = centerZ - VIEW_H / 2 / screenPPB
+
+          octx.font = '11px monospace'
+          octx.fillStyle = '#fff'
+          octx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
+          octx.lineWidth = 1
+
+          // X-koordinaatit yläreunaan
+          const xStart = Math.ceil(worldLeft / step) * step
+          for (let wx = xStart; wx < worldLeft + worldWidth; wx += step) {
+            const sx = (wx - centerX) * screenPPB + VIEW_W / 2
+            const label = String(Math.round(wx))
+            const tw = octx.measureText(label).width
+            // Tausta
+            octx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+            octx.fillRect(sx - tw / 2 - 3, 2, tw + 6, 16)
+            // Teksti
+            octx.fillStyle = '#fff'
+            octx.textAlign = 'center'
+            octx.fillText(label, sx, 14)
+            // Pieni viiva
+            octx.beginPath()
+            octx.moveTo(sx, 18)
+            octx.lineTo(sx, 24)
+            octx.stroke()
+          }
+
+          // Z-koordinaatit vasempaan reunaan
+          const zStart = Math.ceil(worldTop / step) * step
+          for (let wz = zStart; wz < worldTop + worldHeight; wz += step) {
+            const sy = (wz - centerZ) * screenPPB + VIEW_H / 2
+            const label = String(Math.round(wz))
+            const tw = octx.measureText(label).width
+            // Tausta
+            octx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+            octx.fillRect(2, sy - 8, tw + 6, 16)
+            // Teksti
+            octx.fillStyle = '#fff'
+            octx.textAlign = 'left'
+            octx.fillText(label, 5, sy + 4)
+            // Pieni viiva
+            octx.beginPath()
+            octx.moveTo(tw + 10, sy)
+            octx.lineTo(tw + 16, sy)
+            octx.stroke()
+          }
+        }
 
         // Piirrä region-reunat (512x512 blokkia)
         if (showRegionsRef.current) {
@@ -782,6 +844,7 @@ export default function SeedMap() {
             ))}
           </select>
         </div>
+        <div className="seedmap-biome-hover" ref={biomeHoverRef} />
       </div>
 
       <div
@@ -804,7 +867,6 @@ export default function SeedMap() {
             <span>X: {popup.x}, Z: {popup.z}</span>
           </div>
         )}
-        <div className="seedmap-biome-hover" ref={biomeHoverRef} />
       </div>
 
       <div className="seedmap-structures">
@@ -849,6 +911,12 @@ export default function SeedMap() {
         onToggleRegions={() => {
           setShowRegions(v => !v)
           showRegionsRef.current = !showRegionsRef.current
+          if (scheduleDrawRef.current) scheduleDrawRef.current()
+        }}
+        showCoords={showCoords}
+        onToggleCoords={() => {
+          setShowCoords(v => !v)
+          showCoordsRef.current = !showCoordsRef.current
           if (scheduleDrawRef.current) scheduleDrawRef.current()
         }}
       />
